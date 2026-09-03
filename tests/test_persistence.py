@@ -40,19 +40,44 @@ class PersistenceTest(unittest.TestCase):
             "echo #2: next room",
         )
 
-    def test_duplicate_message_id_is_idempotent(self) -> None:
-        store = SessionStore()
+    def test_duplicate_message_id_reuses_recorded_reply(self) -> None:
+        calls = []
+
+        def counting_reply(history):
+            calls.append(history)
+            return f"reply {len(calls)}"
+
+        store = SessionStore(reply_text=counting_reply)
 
         first = store.handle(message("hello", "msg-1"))
         duplicate = store.handle(message("hello", "msg-1"))
         following = store.handle(message("again", "msg-2"))
 
+        self.assertEqual(first.text, "reply 1")
         self.assertEqual(duplicate.text, first.text)
-        self.assertEqual(following.text, "echo #2: again")
+        self.assertEqual(following.text, "reply 2")
+        self.assertEqual(len(calls), 2)
         self.assertEqual(
-            store.session_for(first.conversation).user_texts,
-            ["hello", "again"],
+            store.session_for(first.conversation).history,
+            [
+                ("user", "hello"),
+                ("assistant", "reply 1"),
+                ("user", "again"),
+                ("assistant", "reply 2"),
+            ],
         )
+
+    def test_roundtrip_preserves_reply_strategy(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = os.path.join(directory, "sessions.json")
+            store = SessionStore(reply_text=lambda history: "custom reply")
+            store.handle(message("hello", "msg-1"))
+            save_store(path, store)
+
+            restored = load_store(path, reply_text=lambda history: "custom reply")
+            following = restored.handle(message("again", "msg-2"))
+
+        self.assertEqual(following.text, "custom reply")
 
     def test_console_restarts_continue_turn_numbering(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

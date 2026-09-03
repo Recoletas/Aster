@@ -6,6 +6,7 @@ import os
 import sys
 
 from aster.agent import SessionStore
+from aster.core import echo_reply
 from aster.messages import ConversationRef, IncomingMessage, Reply
 from aster.storage import load_store, save_store
 
@@ -76,12 +77,23 @@ def main() -> None:
         "--store",
         help="JSON file used to persist conversation sessions across runs",
     )
+    parser.add_argument(
+        "--llm",
+        action="store_true",
+        help="reply with MiniMax (requires MINIMAX_API_KEY) instead of the offline echo",
+    )
     args = parser.parse_args()
 
+    reply_text = echo_reply
+    if args.llm:
+        from aster.provider import chat_reply  # imported here so offline runs need no SDK
+
+        reply_text = chat_reply
+
     if args.store and os.path.exists(args.store):
-        store = load_store(args.store)
+        store = load_store(args.store, reply_text=reply_text)
     else:
-        store = SessionStore()
+        store = SessionStore(reply_text=reply_text)
 
     for line in sys.stdin:
         line = line.strip()
@@ -90,7 +102,7 @@ def main() -> None:
 
         try:
             output = process_line(line, store)
-        except ValueError as error:
+        except (ValueError, RuntimeError) as error:
             print(f"error: {error}", file=sys.stderr)
             raise SystemExit(2) from error
 

@@ -28,8 +28,13 @@ class ConversationFlowTest(unittest.TestCase):
         self.assertEqual(first.text, "echo #1: hello")
         self.assertEqual(second.text, "echo #2: again")
         self.assertEqual(
-            store.session_for(first.conversation).user_texts,
-            ["hello", "again"],
+            store.session_for(first.conversation).history,
+            [
+                ("user", "hello"),
+                ("assistant", "echo #1: hello"),
+                ("user", "again"),
+                ("assistant", "echo #2: again"),
+            ],
         )
 
     def test_conversations_do_not_share_state(self) -> None:

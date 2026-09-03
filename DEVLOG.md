@@ -316,3 +316,45 @@
 
 - M4 依赖选择：`anthropic` Python SDK（协议实现更稳，但引入首个第三方依赖）或标准库 `urllib` 直发 Messages 请求（零依赖，先非流式）——待 M4 计划中定。
 - MiniMax 官方文档的端点/鉴权细节尚未经本仓库直接验证，M4 设计时应核对官方文档。
+
+## 2026-09-04 — M4 最小 LLM 对话边界
+
+### 本次目标
+
+人工批准方案 A：用 anthropic Python SDK（覆写 baseURL）接入 MiniMax，把现有链路的回复策略换成真实模型；provider 细节不泄漏进 core/agent。
+
+### 实际完成
+
+- 新增 `aster/provider.py`：唯一认识 SDK 与端点的模块（`to_api_messages`/`extract_text`/`chat_reply`/`build_client`）；`MINIMAX_API_KEY` 缺失时抛 RuntimeError，CLI 捕获后干净退出 2；
+- `aster/agent.py`：会话历史改为 (role, text) 交替对；回复策略经构造参数注入（默认 `core.echo_reply`）；策略调用基于历史候选、成功后才落状态，失败不产生半写；重复投递直接复用已记录的 assistant 文本，不重调策略；
+- `aster/core.py`：收敛为确定性策略 `echo_reply(history)`；
+- `aster/console.py`：`--llm` 开关，provider 懒导入——不装 SDK 的离线用法完全不受影响；`--store` 与 `--llm` 可组合且加载时保留策略；
+- `aster/storage.py`：持久化格式变为 history 交替对，`load_store` 接受并保留策略；
+- `requirements.txt`（anthropic>=1.3.0，项目首个第三方依赖）、`.env.example`、`.gitignore` 增加 `.env`；
+- 测试：更新边界/会话/持久化测试（非法输入用注入的记录函数证明策略未被调用），新增 provider 边界测试（假 client，不触网），共 15 个。
+
+### 关键决策或发现
+
+- **BASE_URL 陷阱**：Python anthropic SDK 会自动追加 `/v1/messages`，base_url 写 openmaic 式的 `.../anthropic/v1` 会请求 `.../v1/v1/messages` → 404。正确值是 `https://api.minimaxi.com/anthropic`，已用最小探针验证并加注释。
+- 策略注入是项目第一个真正的参数化接缝：此前规则是"没有第二实现不做抽象"，现在 LLM 与 echo 两个实现都真实存在。
+- 重复投递语义升级：复用历史中的 assistant 回复而非重新生成，对 LLM 计费安全。
+- MiniMax 返回内容按 block type 过滤，仅拼接 `text` 块，兼容潜在的 thinking 块。
+
+### 执行过的验证
+
+- `python3 -B -m unittest discover -s tests`：15 个测试全部通过（离线，无网络调用）；
+- 缺 `MINIMAX_API_KEY` 时 `--llm` 输出 `error: MINIMAX_API_KEY: environment variable not set`，退出码 2；
+- 无 `--llm` 时 CLI 行为与 M3 一致（含 `--store`）；
+- 导入方向：agent→core+messages；storage→agent+core+messages；provider 不导入任何 aster 模块；console 仅在 `--llm` 分支懒导入 provider；
+- **真实演示（三个独立进程，`--store` 接力）**：P1 告知"我叫小明，后端工程师"→ MiniMax 确认；P2（新进程从 JSON 恢复）问"我叫什么"→ 正确答出；P3 另一会话问同样问题 → 正确回答不知道（会话隔离有效）；
+- 密钥处理：仅经管道注入进程环境变量，未写入仓库任何文件，输出未回显。
+
+### 未解决问题
+
+- 非流式调用，长回复需整体等待；thinking 块的流式行为未验证。
+- anthropic SDK 安装在用户全局 miniconda 环境，无虚拟环境隔离。
+- 会话历史无限增长，无窗口或摘要策略。
+
+### 下一步建议
+
+停止。后续候选需人工定优先级：流式输出、工具调用/MCP、RAG、首个真实消息渠道、会话历史数据库化。

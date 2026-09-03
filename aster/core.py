@@ -1,17 +1,12 @@
-"""Minimal deterministic message handling for the M1 experiment."""
-
-from aster.messages import IncomingMessage, Reply
+"""Deterministic response strategy for offline runs and tests."""
 
 
-def handle_message(message: IncomingMessage, turn: int = 1) -> Reply:
-    """Return a deterministic reply without depending on a channel adapter.
+def echo_reply(history: list[tuple[str, str]]) -> str:
+    """Reply deterministically from the alternating conversation history.
 
-    ``turn`` is the 1-based position of this message within its conversation;
-    it is the only conversation state the strategy may read.
+    ``history`` entries are ``(role, text)`` pairs ending with the current
+    user message; the strategy only counts the user turns.
     """
 
-    return Reply(
-        conversation=message.conversation,
-        in_reply_to_external_message_id=message.external_message_id,
-        text=f"echo #{turn}: {message.text}",
-    )
+    turn = sum(1 for role, _ in history if role == "user")
+    return f"echo #{turn}: {history[-1][1]}"

@@ -4,37 +4,36 @@ Aster 是一个由两人共同演进的智能体客服学习项目。项目希�
 
 ## 当前状态
 
-**M1–M3 已完成**：核心消息边界、最小对话应用层和会话持久化。
+**M1–M4 已完成**：核心消息边界、最小对话应用层、会话持久化和真实 LLM 对话（MiniMax）。
 
 当前已有：
 
-- 可运行的最小纵向链路：Console JSON line → 规范消息 → 会话状态 → 确定性回复 → Console 输出；
-- 每会话内存状态与轮次回复，会话之间隔离（M2）；
-- 单 JSON 文件持久化、重启恢复、重复投递幂等（M3，`--store`）；
-- 11 个标准库测试；无第三方依赖。
+- 可运行的最小纵向链路：Console JSON line → 规范消息 → 会话状态 → 回复策略 → Console 输出；
+- 每会话交替历史，会话之间隔离；
+- 单 JSON 文件持久化、重启恢复、重复投递幂等（`--store`）；
+- 真实 LLM 回复：MiniMax（Anthropic 兼容端点）；离线确定性 echo 是默认策略，`--llm` 切换；
+- 15 个标准库测试（全部离线）。
 
 当前没有：
 
-- LLM、RAG、MCP、Web API；
+- 流式输出、工具调用、RAG、MCP、Web API；
 - 真实消息渠道、自动化或工单实现；
 - 数据库（持久化是可逆的 JSON 文件实验）与部署方案。
 
 ## 运行
 
-需要 Python 3.11+，仅使用标准库：
+需要 Python 3.11+。离线模式仅用标准库；`--llm` 需要 `requirements.txt` 中的 `anthropic` SDK 和 `MINIMAX_API_KEY` 环境变量（密钥绝不入库）：
 
 ```bash
 printf '%s\n' '{"room":"room-7","event":"msg-42","user":"alice","body":"hello"}' | python3 -m aster.console
 # {"room":"room-7","reply_to":"msg-42","body":"echo #1: hello"}
 
-# 同一会话连续消息：echo #1、echo #2
-printf '%s\n%s\n' '{"room":"r","event":"m1","user":"a","body":"hi"}' '{"room":"r","event":"m2","user":"a","body":"again"}' | python3 -m aster.console
-
-# 会话跨进程持久化：第二次运行从 data/sessions.json 恢复，输出 echo #2
-printf '%s\n' '{"room":"r","event":"m1","user":"a","body":"hi"}' | python3 -m aster.console --store data/sessions.json
-printf '%s\n' '{"room":"r","event":"m2","user":"a","body":"back"}' | python3 -m aster.console --store data/sessions.json
-
 python3 -m unittest discover -s tests
+
+# 真实 LLM 模式
+pip install -r requirements.txt
+export MINIMAX_API_KEY=sk-...
+printf '%s\n' '{"room":"r","event":"m1","user":"a","body":"你好"}' | python3 -m aster.console --llm --store data/sessions.json
 ```
 
 ## 文档入口
