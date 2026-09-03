@@ -103,6 +103,8 @@ printf '%s\n' '{"room":"room-7","event":"msg-42","user":"alice","body":"hello"}'
 {"room":"room-7","reply_to":"msg-42","body":"echo: hello"}
 ```
 
+> 注：M2 起确定性策略输出为 `echo #1: hello`（含会话轮次）。本节保留 M1-B 验收时的原始期望输出；消息契约字段不变。
+
 转换结果必须保留：
 
 - `channel_id = "console"`

@@ -175,3 +175,57 @@
 ### 下一步建议
 
 人工验收 M1-B 并决定是否进入 M2；恢复 Git 工作树后建议以当前 15 个文件建立首次提交基线。
+
+## 2026-09-04 — Git 基线建立
+
+### 本次目标
+
+在环境变为可写后建立有效 Git 工作树，使后续里程碑有真实 diff 可审。
+
+### 实际完成
+
+- `git init -b main`；`.git` 不再是只读挂载，仓库根为可写 ext4；
+- 新增 `.gitignore`（`__pycache__/`、`*.pyc`、`data/`）；
+- 以 M1-B 原状提交基线 `b5b64e5`（16 个文件），提交使用用户全局 Git 身份，仅本地未推送。
+
+### 关键发现
+
+- `.git`、`.agents`、`.codex` 的只读 tmpfs 挂载本次已完全消失，此前"环境限制"不再存在。
+
+### 执行过的验证
+
+- `git log --oneline`、`git status --short`：基线提交后工作树干净。
+
+## 2026-09-04 — M2 最小 Agent 对话链路
+
+### 本次目标
+
+把一次性 echo 升级为带会话状态的最小对话应用层；不做持久化与幂等。
+
+### 实际完成
+
+- 新增 `aster/agent.py`：`ConversationSession`（已收文本）与 `SessionStore`（内存会话表）；
+- `aster/core.py`：`handle_message` 增加 turn 参数，回复为 `echo #n: text`；
+- `aster/console.py`：多行 JSON line 输入，整个输入流共享一个 `SessionStore`，空行跳过；
+- 测试：更新 M1 回归测试（新签名与 `#1` 输出），新增 3 个会话测试，共 8 个。
+
+### 关键决策或发现
+
+- 轮次由应用层计数，策略只读取 turn：状态与策略分离，且策略仍是纯函数。
+- M1 契约文档中的 `echo: hello` 输出属 M1-B 验收记录，不回写；契约字段未变。
+
+### 执行过的验证
+
+- `python3 -B -m unittest discover -s tests -v`：8 个测试全部通过；
+- 三行 CLI 演示：room-7 得 `#1`/`#2`，room-8 独立得 `#1`，退出码 0；
+- 空白 `body`：边界拒绝，退出码 2；
+- 导入方向检查：core→messages，agent→core+messages，均无渠道导入。
+
+### 未解决问题
+
+- 会话状态仅在内存，进程结束即丢失（M3 处理）。
+- 重复投递尚未幂等（M3 处理）。
+
+### 下一步建议
+
+按计划继续 M3 会话持久化。

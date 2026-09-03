@@ -1,9 +1,9 @@
-"""Fake console channel for exercising the M1 message boundary."""
+"""Fake console channel for exercising the conversation boundary."""
 
 import json
 import sys
 
-from aster.core import handle_message
+from aster.agent import SessionStore
 from aster.messages import ConversationRef, IncomingMessage, Reply
 
 
@@ -53,8 +53,8 @@ def reply_to_console(reply: Reply) -> dict[str, str]:
     }
 
 
-def process_line(line: str) -> str:
-    """Run one Console JSON line through the complete M1 flow."""
+def process_line(line: str, store: SessionStore) -> str:
+    """Run one Console JSON line through the complete conversation flow."""
 
     try:
         payload = json.loads(line)
@@ -62,24 +62,25 @@ def process_line(line: str) -> str:
         raise ValueError(f"payload: invalid JSON ({error.msg})") from error
 
     message = incoming_from_console(payload)
-    reply = handle_message(message)
+    reply = store.handle(message)
     output = reply_to_console(reply)
     return json.dumps(output, ensure_ascii=False, separators=(",", ":"))
 
 
 def main() -> None:
-    line = sys.stdin.readline()
-    if not line:
-        print("error: input: expected one JSON line", file=sys.stderr)
-        raise SystemExit(2)
+    store = SessionStore()
+    for line in sys.stdin:
+        line = line.strip()
+        if not line:
+            continue
 
-    try:
-        output = process_line(line)
-    except ValueError as error:
-        print(f"error: {error}", file=sys.stderr)
-        raise SystemExit(2) from error
+        try:
+            output = process_line(line, store)
+        except ValueError as error:
+            print(f"error: {error}", file=sys.stderr)
+            raise SystemExit(2) from error
 
-    print(output)
+        print(output)
 
 
 if __name__ == "__main__":

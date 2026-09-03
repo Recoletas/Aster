@@ -4,22 +4,33 @@ Aster 是一个由两人共同演进的智能体客服学习项目。项目希�
 
 ## 当前状态
 
-项目已完成 Phase 0，当前处于 **M1-A：核心消息边界设计**。M1-A 只产出设计，不包含业务实现。
+当前处于 **M2–M3：最小对话应用与会话持久化**。M1（核心消息边界）已完成。
 
 当前已有：
 
-- 已确认需求、非目标和关键不确定项；
-- 基于官方资料的架构与许可证调研；
-- 一份分级标注已接受与待确认内容的架构建议；
-- 当前实验基线的首个已接受 ADR；
-- 小步开发、记录和验收规则。
+- 可运行的最小纵向链路：Console JSON line → 规范消息 → 会话状态 → 确定性回复 → Console 输出；
+- 每会话内存状态与轮次回复（M2）；
+- 8 个标准库测试；无第三方依赖。
 
 当前没有：
 
-- 可运行的业务代码或启动命令；
-- 已选定的后端框架、数据库或部署方案；
-- 真实消息渠道、LLM、RAG、MCP、自动化或工单实现；
-- 已接受的 ADR。
+- 持久化（M3 进行中）、LLM、RAG、MCP、Web API；
+- 真实消息渠道、自动化或工单实现；
+- 已选定的数据库或部署方案。
+
+## 运行
+
+需要 Python 3.11+，仅使用标准库：
+
+```bash
+printf '%s\n' '{"room":"room-7","event":"msg-42","user":"alice","body":"hello"}' | python3 -m aster.console
+# {"room":"room-7","reply_to":"msg-42","body":"echo #1: hello"}
+
+printf '%s\n%s\n' '{"room":"r","event":"m1","user":"a","body":"hi"}' '{"room":"r","event":"m2","user":"a","body":"again"}' | python3 -m aster.console
+# 同一会话连续两条消息：echo #1、echo #2
+
+python3 -m unittest discover -s tests
+```
 
 ## 文档入口
 
@@ -27,8 +38,8 @@ Aster 是一个由两人共同演进的智能体客服学习项目。项目希�
 
 1. [需求与约束](docs/requirements.md)
 2. [架构调研](docs/research/architecture-survey.md)
-3. [架构建议（待确认）](docs/architecture/architecture-proposal.md)
-4. [M1 消息契约设计（待确认）](docs/architecture/m1-message-contract.md)
+3. [架构建议（部分已接受）](docs/architecture/architecture-proposal.md)
+4. [M1 消息契约（已接受）](docs/architecture/m1-message-contract.md)
 5. [已接受 ADR](docs/adr/0001-experimental-baseline.md)
 6. [当前计划](PLAN.md)
 7. [贡献指南](CONTRIBUTING.md)

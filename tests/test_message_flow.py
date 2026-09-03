@@ -2,6 +2,7 @@ import json
 import unittest
 from unittest.mock import patch
 
+from aster.agent import SessionStore
 from aster.console import incoming_from_console, process_line, reply_to_console
 from aster.core import handle_message
 from aster.messages import ConversationRef, IncomingMessage, Reply
@@ -39,11 +40,11 @@ class MessageFlowTest(unittest.TestCase):
             ({**VALID_PAYLOAD, "body": "   "}, "body"),
         )
 
-        with patch("aster.console.handle_message") as core_handler:
+        with patch("aster.agent.handle_message") as core_handler:
             for payload, field in invalid_cases:
                 with self.subTest(field=field):
                     with self.assertRaisesRegex(ValueError, field):
-                        process_line(json.dumps(payload))
+                        process_line(json.dumps(payload), SessionStore())
 
         core_handler.assert_not_called()
 
@@ -55,7 +56,7 @@ class MessageFlowTest(unittest.TestCase):
             Reply(
                 conversation=message.conversation,
                 in_reply_to_external_message_id="msg-42",
-                text="echo: hello",
+                text="echo #1: hello",
             ),
         )
 
@@ -64,15 +65,15 @@ class MessageFlowTest(unittest.TestCase):
 
         self.assertEqual(
             reply_to_console(reply),
-            {"room": "room-7", "reply_to": "msg-42", "body": "echo: hello"},
+            {"room": "room-7", "reply_to": "msg-42", "body": "echo #1: hello"},
         )
 
     def test_complete_console_flow(self) -> None:
-        output = process_line(json.dumps(VALID_PAYLOAD))
+        output = process_line(json.dumps(VALID_PAYLOAD), SessionStore())
 
         self.assertEqual(
             json.loads(output),
-            {"room": "room-7", "reply_to": "msg-42", "body": "echo: hello"},
+            {"room": "room-7", "reply_to": "msg-42", "body": "echo #1: hello"},
         )
 
 
