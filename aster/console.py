@@ -84,10 +84,13 @@ def main() -> None:
     )
     args = parser.parse_args()
 
+    registry = None
     reply_text = echo_reply
     if args.llm:
         try:
-            from aster.provider import chat_reply  # imported here so offline runs need no SDK
+            # imported here so offline runs need no SDK
+            from aster.provider import make_chat_reply
+            from aster.tools import build_default_registry
         except ImportError as error:
             print(
                 f"error: --llm requires the anthropic SDK (pip install -r requirements.txt): {error}",
@@ -95,7 +98,8 @@ def main() -> None:
             )
             raise SystemExit(2) from error
 
-        reply_text = chat_reply
+        registry = build_default_registry()
+        reply_text = make_chat_reply(registry)
 
     if args.store and os.path.exists(args.store):
         store = load_store(args.store, reply_text=reply_text)
@@ -116,6 +120,10 @@ def main() -> None:
         print(output)
         if args.store:
             save_store(args.store, store)
+
+    if registry is not None:
+        for entry in registry.audit:
+            print(f"tool: {entry}", file=sys.stderr)
 
 
 if __name__ == "__main__":

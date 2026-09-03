@@ -392,3 +392,45 @@
 ### 下一步建议
 
 维持此前停止点：流式输出、工具调用/MCP、RAG、首个真实消息渠道、会话历史数据库化，等人工定优先级。
+
+## 2026-09-04 — M5 最小工具调用
+
+### 本次目标
+
+按人工指示"充分调研市场，有开源实现直接使用"后实现：模型能决定调用工具、参数经校验、结果回填生成最终回复，全程可审计。
+
+### 调研结论（详见 `docs/research/tool-calling-survey.md`）
+
+- MiniMax Anthropic 兼容端点对 `tools`/`tool_use`/`tool_result` 完全支持；硬约束：必须完整回传含 thinking 的 `response.content`；`mcp_servers` 被忽略（服务端 MCP 不可用）；
+- 采用：anthropic SDK（协议层，已有）+ pydantic v2（schema 与校验，新增，MIT）；
+- 不采用：MCP 官方 SDK（client/server + asyncio，当前无外部工具互通需求，留作未来工具来源边界）、pydantic-ai（采用即替换自建薄编排层，与 ADR-0001 基线冲突，留作薄层失控时的迁移候选）；注册表与循环自建（被端点约束塑造，无匹配微库）。
+
+### 实际完成
+
+- 新增 `aster/tools.py`：`Tool`（pydantic 参数模型 → JSON Schema，校验失败以错误字符串经 `tool_result` 回给模型自纠）+ `ToolRegistry`（注册即白名单 + 审计日志）+ 内存工单假实现（create_ticket/list_tickets）；
+- `aster/provider.py`：`make_chat_reply(registry)` 工具循环（stop_reason=tool_use → 执行 → tool_result → 续跑，上限 4 轮），`echo_content` 按端点要求完整回传含 thinking 的内容；系统提示词明确"动作必须走工具、查询必须确认"；
+- `aster/console.py`：`--llm` 接注册表，审计输出到 stderr（不污染 stdout JSON 协议）；
+- 依赖：pydantic 入 `requirements.txt` 并只装 `.venv`；测试在无 SDK/pydantic 环境自动跳过；
+- 测试：新增工具边界与脚本化假 client 工具循环测试，共 25 个（`.venv`）。
+
+### 关键发现
+
+- **模型调用工具是非确定性的**：同一三句话场景跑了三轮，`tool_choice: auto` 下动作类消息（建工单）两次未被调用、模型虚构"工单号 2"；查询类一次凭上下文跳过工具（碰巧答对）。提示词强化能降低不能消除。
+- **审计日志当场检出幻觉**：声称"工单 2 已建"与审计（无第二次 create 记录）不一致立即可见；`list_tickets` 的真实返回也直接戳穿虚构。审计是本阶段唯一可靠的工具调用对账手段。
+- 自身流程事故一次：console 编辑时把逐行 `save_store` 挤进了审计打印循环，持久化静默失效——被 M3 的跨进程重启回归测试当场抓住。回归测试的价值实证。
+
+### 执行过的验证
+
+- `.venv`：25 个测试全部通过；系统 python（无 SDK/pydantic）：20 个通过、1 个模块级跳过；
+- 真实三轮演示 ×3（建工单×2 + 查询）：工具调用、参数校验（priority 归一化为 high/normal）、结果回填、最终回复引用真实工单号均验证成功；同时记录上述非确定性发现；
+- 审计日志：成功调用与校验失败均有记录；
+- 导入方向：tools 不被 core/agent 依赖，console 为组合根，provider 不导入 aster 模块。
+
+### 未解决问题
+
+- 工具调用时机依赖模型自发性：缓解靠审计对账；根治需按意图强制 `tool_choice` 或动作结果对账机制（候选里程碑）。
+- 工单数据不持久化（进程内假实现）；审计仅 stderr 输出；会话历史无限增长。
+
+### 下一步建议
+
+停止。候选：工具调用可靠性策略、RAG、流式输出、真实渠道、数据库化、MCP 客户端，等人工定优先级。

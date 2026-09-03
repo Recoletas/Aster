@@ -91,6 +91,7 @@ Dify/RAGFlow 可在后续通过 API 做替换实验；只有当状态图、暂�
 2. **M2 最小 Agent 对话链路**：已按最小对话应用层落地——会话状态加依赖轮次的确定性回复；真实模型调用因缺少 API key 与 provider 决定尚未开始。
 3. **M3 会话持久化**：已用单 JSON 文件验证重启恢复、重复投递幂等和最小会话历史；数据库选型仍开放。
 4. **M4 最小 LLM 对话**：已接入 MiniMax（Anthropic 兼容端点、anthropic SDK、环境变量密钥、策略注入接缝）；流式与工具调用未开始。
+5. **M5 最小工具调用**：已落地——pydantic schema/校验 + anthropic SDK 工具循环 + 注册表白名单与审计日志；模型自发调用是非确定性的，可靠性策略（意图级 tool_choice/结果对账）为后续专项，见 `docs/research/tool-calling-survey.md`。
 
 进程外 Channel Adapter 不进入固定 Roadmap。只有 SDK/语言冲突、崩溃隔离、独立发布扩缩容或非可信第三方代码等条件出现后，才提出专门实验。
 
