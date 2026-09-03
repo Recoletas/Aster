@@ -1,8 +1,6 @@
 # Aster Agent 单次任务流程
 
-状态：临时回退文档，不会被 Codex 自动作为 Skill 加载。
-
-OpenAI 官方支持仓库级 `.agents/skills/<name>/SKILL.md`，但本次 Agent 执行环境把 `.agents` 单独挂载为只读 `tmpfs`；这不是 Aster 仓库的长期属性。本流程应在正常可写 clone 中迁移为精简的 `aster-workflow` Skill；迁移时不要复制整份 `AGENTS.md`。
+状态：本流程已迁移为可自动加载的 Skill：`.agents/skills/aster-workflow/SKILL.md`（ZCode 与 Codex 的官方项目级 Skill 路径均为仓库内 `.agents/skills/`）。本文件保留为不依赖特定工具加载机制的参考文档；内容以 Skill 为准。
 
 ## 执行一次标准任务
 

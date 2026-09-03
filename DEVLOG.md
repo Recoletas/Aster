@@ -268,3 +268,24 @@
 ### 下一步建议
 
 停止并等待人工决定下一方向：真实 LLM provider（需 API key）、会话历史数据库化，或首个真实消息渠道。
+
+## 2026-09-04 — aster-workflow 项目级 Skill 迁移
+
+### 本次目标
+
+把临时回退流程迁移为可被 Coding Agent 自动加载的项目级 Skill；不复制 `AGENTS.md`。
+
+### 实际完成
+
+- 经 ZCode 官方配置指南确认项目级 Skill 的官方位置：仓库内 `.zcode/skills/` 或 `.agents/skills/`（目录 + SKILL.md），且跨工具共享建议使用 `.agents/skills/`——与 Phase 0 调研的 Codex 官方仓库级路径一致；
+- 创建 `.agents/skills/aster-workflow/SKILL.md`：检查 → 计划 → 实现 → 验证 → 记录 → 停止，指向 `AGENTS.md`/`PLAN.md`/`DEVLOG` 而非复制内容；
+- `docs/agent-workflow.md` 状态更新为"已迁移，本文件保留为工具无关参考"。
+
+### 执行过的验证
+
+- Skill 路径符合官方发现顺序（工作区 `.agents/skills` 在扫描列表内）；
+- Markdown 链接与空白检查纳入本次全量验证。
+
+### 未解决问题
+
+- Skill 的自动加载需在下一个新会话中确认其出现在可用列表（本会话启动时列表已固定），属待验证而非已验证。
