@@ -1,7 +1,10 @@
 import unittest
 from types import SimpleNamespace
 
-from aster.provider import chat_reply, extract_text, to_api_messages
+try:
+    from aster.provider import chat_reply, extract_text, to_api_messages
+except ImportError:  # anthropic SDK not installed; offline-only environments skip these
+    raise unittest.SkipTest("anthropic SDK not installed (use .venv for provider tests)")
 
 
 class FakeMessages:

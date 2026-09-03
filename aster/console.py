@@ -86,7 +86,14 @@ def main() -> None:
 
     reply_text = echo_reply
     if args.llm:
-        from aster.provider import chat_reply  # imported here so offline runs need no SDK
+        try:
+            from aster.provider import chat_reply  # imported here so offline runs need no SDK
+        except ImportError as error:
+            print(
+                f"error: --llm requires the anthropic SDK (pip install -r requirements.txt): {error}",
+                file=sys.stderr,
+            )
+            raise SystemExit(2) from error
 
         reply_text = chat_reply
 

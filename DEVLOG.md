@@ -358,3 +358,37 @@
 ### 下一步建议
 
 停止。后续候选需人工定优先级：流式输出、工具调用/MCP、RAG、首个真实消息渠道、会话历史数据库化。
+
+## 2026-09-04 — 依赖环境整改：全局 miniconda 回滚，项目改用 .venv
+
+### 本次目标
+
+修复人工指出的问题：M4 把 anthropic SDK 装进了用户全局 miniconda 环境。要求全局环境恢复原状，依赖改入项目本地 `.venv`。
+
+### 实际完成
+
+- 卸载全局环境中的 anthropic 及仅由其带入的依赖（`docstring_parser`、`httpcore2`、`httpx2`；卸载前核对 Required-by，确认无其他依赖方）；
+- `idna` 由 anthropic 安装时被动升级的 3.19 回退到原版本 3.7，原有 httpx/requests/anyio 导入验证正常；
+- 创建 `~/Aster/.venv` 并安装 `requirements.txt`；`.gitignore` 增加 `.venv/`；
+- `tests/test_provider.py` 在无 SDK 环境模块级 `unittest.SkipTest`，离线套件保持全绿；
+- `--llm` 缺 SDK 时输出可操作错误（提示 `pip install -r requirements.txt`）而非堆栈，退出码 2；
+- `AGENTS.md` 新增规则：第三方依赖一律装项目本地 `.venv`，禁止进用户全局/conda 环境；README 更新运行方式。
+
+### 关键教训
+
+引入项目首个第三方依赖时，必须同步建立隔离环境，并把这条边界写进 Agent 规则；本次先装后补属于流程失误，已用规则防复发。
+
+### 执行过的验证
+
+- 全局 `python3 -c "import anthropic"` → ModuleNotFoundError；`pip show idna` → 3.7；httpx/requests/anyio 导入正常；
+- 系统 python 套件：13 个测试 OK（1 skipped = provider，无失败）；无 SDK 时 `--llm` 退出码 2 且提示清晰；
+- `.venv` python 套件：15 个全部通过；
+- 真实调用经 `.venv/bin/python -m aster.console --llm` 成功（MiniMax-M3 回复"收到"）。
+
+### 未解决问题
+
+- 无。
+
+### 下一步建议
+
+维持此前停止点：流式输出、工具调用/MCP、RAG、首个真实消息渠道、会话历史数据库化，等人工定优先级。

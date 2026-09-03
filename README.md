@@ -22,18 +22,20 @@ Aster 是一个由两人共同演进的智能体客服学习项目。项目希�
 
 ## 运行
 
-需要 Python 3.11+。离线模式仅用标准库；`--llm` 需要 `requirements.txt` 中的 `anthropic` SDK 和 `MINIMAX_API_KEY` 环境变量（密钥绝不入库）：
+需要 Python 3.11+。离线模式仅用标准库；`--llm` 需要 `requirements.txt` 中的 `anthropic` SDK 和 `MINIMAX_API_KEY` 环境变量（密钥绝不入库）。第三方依赖一律装入项目本地 `.venv`，不要装进全局或 conda 环境：
 
 ```bash
 printf '%s\n' '{"room":"room-7","event":"msg-42","user":"alice","body":"hello"}' | python3 -m aster.console
 # {"room":"room-7","reply_to":"msg-42","body":"echo #1: hello"}
 
 python3 -m unittest discover -s tests
+# 离线全绿；未安装 SDK 时 provider 测试自动跳过
 
 # 真实 LLM 模式
-pip install -r requirements.txt
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
 export MINIMAX_API_KEY=sk-...
-printf '%s\n' '{"room":"r","event":"m1","user":"a","body":"你好"}' | python3 -m aster.console --llm --store data/sessions.json
+printf '%s\n' '{"room":"r","event":"m1","user":"a","body":"你好"}' | .venv/bin/python -m aster.console --llm --store data/sessions.json
 ```
 
 ## 文档入口
