@@ -37,8 +37,8 @@ M1–M3 均已完成（2026-09-04）。人工验收经用户授权跳过；下�
 ## 开放问题
 
 - Aster 是否最终面向多租户 SaaS 或再分发产品？当前不要求回答。
-- LLM provider 选择与 API key 提供，是真实模型对话的前置条件。
+- LLM provider 方向已由人工确定为 MiniMax（Anthropic 兼容端点，模型 MiniMax-M3；可用配置见 `~/openmaic/.env.local`，密钥不得复制入本仓库）。待定：Aster 侧密钥注入方式（环境变量）与首个依赖选择（anthropic SDK 或标准库 HTTP）。
 
 ## 下一道人工确认门
 
-M1–M3 已完成并停止。下一方向需要人工决定，例如：接入真实 LLM provider（需 API key 与 provider 选择）、会话历史的数据库化、或首个真实消息渠道。未获明确授权前不得自行引入。
+M1–M3 已完成并停止。已定方向：下一里程碑为 M4 最小 LLM 对话（provider MiniMax），等待人工批准后开始；其中引入首个第三方依赖或实现 provider 边界的方式需在 M4 计划中明确。会话历史数据库化与首个真实渠道仍在后序。

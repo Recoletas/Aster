@@ -289,3 +289,30 @@
 ### 未解决问题
 
 - Skill 的自动加载需在下一个新会话中确认其出现在可用列表（本会话启动时列表已固定），属待验证而非已验证。
+
+## 2026-09-04 — LLM provider 调研输入与首次推送
+
+### 本次目标
+
+按人工指示：只读调研 `~/openmaic` 中已配置的 MiniMax 模型接入，作为 M4 的 provider 输入；将本地提交推送到远端。
+
+### 关键发现（来源：openmaic `.env.local` 实际配置与 `lib/ai/providers.ts` 注释）
+
+- LLM 走 **Anthropic 兼容端点**：`https://api.minimaxi.com/anthropic/v1`（国际站备用 `https://api.minimax.io/anthropic/v1`），官方推荐该接入方式（参考 platform.minimaxi.com 的 text-anthropic-api 文档，见 providers.ts 头部来源注释）；
+- 已配置模型 `MiniMax-M3`：1M 上下文、32K 输出、支持流式/工具/视觉；同端点还有 M2.7 系列；
+- openmaic 用 `@ai-sdk/anthropic` 以自定义 baseURL 调用，即标准 Anthropic Messages 协议；
+- 另有 TTS/联网搜索的 MiniMax key，与本里程碑无关。
+
+### 密钥处理
+
+- 密钥只存在于 openmaic 本地 `.env.local`；本仓库不复制、不落盘，本次输出已掩码。Aster 侧应经环境变量注入并加入 `.gitignore` 约束。
+
+### 实际完成
+
+- `PLAN.md` 开放问题与确认门更新为"provider 已定 MiniMax，M4 待批准"；
+- 添加远端 `origin = git@github.com:Recoletas/Aster.git` 并推送全部本地提交。
+
+### 未解决问题
+
+- M4 依赖选择：`anthropic` Python SDK（协议实现更稳，但引入首个第三方依赖）或标准库 `urllib` 直发 Messages 请求（零依赖，先非流式）——待 M4 计划中定。
+- MiniMax 官方文档的端点/鉴权细节尚未经本仓库直接验证，M4 设计时应核对官方文档。
