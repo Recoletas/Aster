@@ -12,9 +12,10 @@ from aster.messages import ConversationRef, IncomingMessage, Reply
 
 @dataclass
 class ConversationSession:
-    """Texts one conversation has sent, in arrival order."""
+    """State one conversation has accumulated, in arrival order."""
 
     user_texts: list[str] = field(default_factory=list)
+    turn_by_message_id: dict[str, int] = field(default_factory=dict)
 
 
 class SessionStore:
@@ -28,9 +29,24 @@ class SessionStore:
             self._sessions[conversation] = ConversationSession()
         return self._sessions[conversation]
 
+    def sessions(self) -> dict[ConversationRef, ConversationSession]:
+        """Snapshot of the sessions currently held in memory."""
+
+        return dict(self._sessions)
+
     def handle(self, message: IncomingMessage) -> Reply:
-        """Record an inbound message and reply using conversation state."""
+        """Record an inbound message and reply using conversation state.
+
+        A repeated external message id is answered from its recorded turn
+        without changing the session again.
+        """
 
         session = self.session_for(message.conversation)
+        recorded_turn = session.turn_by_message_id.get(message.external_message_id)
+        if recorded_turn is not None:
+            return handle_message(message, turn=recorded_turn)
+
         session.user_texts.append(message.text)
-        return handle_message(message, turn=len(session.user_texts))
+        turn = len(session.user_texts)
+        session.turn_by_message_id[message.external_message_id] = turn
+        return handle_message(message, turn=turn)

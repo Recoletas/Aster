@@ -1,10 +1,13 @@
 """Fake console channel for exercising the conversation boundary."""
 
+import argparse
 import json
+import os
 import sys
 
 from aster.agent import SessionStore
 from aster.messages import ConversationRef, IncomingMessage, Reply
+from aster.storage import load_store, save_store
 
 
 CHANNEL_ID = "console"
@@ -68,7 +71,18 @@ def process_line(line: str, store: SessionStore) -> str:
 
 
 def main() -> None:
-    store = SessionStore()
+    parser = argparse.ArgumentParser(description="Fake console channel for Aster.")
+    parser.add_argument(
+        "--store",
+        help="JSON file used to persist conversation sessions across runs",
+    )
+    args = parser.parse_args()
+
+    if args.store and os.path.exists(args.store):
+        store = load_store(args.store)
+    else:
+        store = SessionStore()
+
     for line in sys.stdin:
         line = line.strip()
         if not line:
@@ -81,6 +95,8 @@ def main() -> None:
             raise SystemExit(2) from error
 
         print(output)
+        if args.store:
+            save_store(args.store, store)
 
 
 if __name__ == "__main__":
