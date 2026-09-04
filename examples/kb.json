@@ -1,0 +1,28 @@
+{
+  "entries": [
+    {
+      "question": "Aster 是什么项目？",
+      "answer": "Aster 是一个由两人共同演进的智能体客服学习项目，目标是逐步验证智能对话、知识检索、工具调用、消息渠道和人工客服之间的边界，而不是一次搭建完整平台。"
+    },
+    {
+      "question": "Aster 如何运行测试？",
+      "answer": "在仓库根目录执行 .venv/bin/python -m unittest discover -s tests。全部测试离线运行，不需要 API 密钥；未安装 SDK 时 provider 相关测试会自动跳过。"
+    },
+    {
+      "question": "Aster 使用什么数据库？",
+      "answer": "当前没有数据库。会话状态持久化是单 JSON 文件实验（python -m aster.console --store 路径），支持重启恢复和重复投递幂等；数据库选型保持开放。"
+    },
+    {
+      "question": "Aster 支持哪些消息渠道？",
+      "answer": "当前只有本地 Fake/Console 渠道用于验证边界。QQ、企业微信、钉钉、飞书等真实渠道尚未接入；Aster Core 不依赖任何平台 SDK。"
+    },
+    {
+      "question": "Aster 用什么大模型？",
+      "answer": "通过 Anthropic 兼容端点接入 MiniMax（模型 MiniMax-M3）。密钥经 MINIMAX_API_KEY 环境变量提供，绝不写入仓库。"
+    },
+    {
+      "question": "如何在 Aster 里创建工单？",
+      "answer": "对话中直接描述问题即可，助手会调用 create_ticket 工具创建工单并返回工单号；所有工具调用都有审计记录，回复中引用的工单号会与审计对账。"
+    }
+  ]
+}

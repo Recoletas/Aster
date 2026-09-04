@@ -82,7 +82,17 @@ def main() -> None:
         action="store_true",
         help="reply with MiniMax (requires MINIMAX_API_KEY) instead of the offline echo",
     )
+    parser.add_argument(
+        "--knowledge",
+        help="JSON knowledge base file whose entries are retrieved into the LLM context (needs --llm)",
+    )
     args = parser.parse_args()
+
+    knowledge = None
+    if args.knowledge:
+        from aster.knowledge import KnowledgeBase
+
+        knowledge = KnowledgeBase.load(args.knowledge)
 
     registry = None
     reply_text = echo_reply
@@ -99,7 +109,7 @@ def main() -> None:
             raise SystemExit(2) from error
 
         registry = build_default_registry()
-        reply_text = make_chat_reply(registry)
+        reply_text = make_chat_reply(registry, knowledge=knowledge)
 
     if args.store and os.path.exists(args.store):
         store = load_store(args.store, reply_text=reply_text)

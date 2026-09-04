@@ -54,11 +54,16 @@ def chat_reply(history: list[tuple[str, str]], client=None) -> str:
     return _chat(history, None, client)
 
 
-def make_chat_reply(registry, client=None):
-    """Build a reply strategy that lets the model call registry tools."""
+def make_chat_reply(registry=None, client=None, knowledge=None):
+    """Build a reply strategy that may use registry tools and KB context."""
 
     def reply_text(history: list[tuple[str, str]]) -> str:
-        return _chat(history, registry, client)
+        context = ""
+        if knowledge is not None and history:
+            hits = knowledge.search(history[-1][1])
+            context = knowledge.as_context(hits)
+
+        return _chat(history, registry, client, context=context)
 
     return reply_text
 
@@ -73,18 +78,21 @@ def echo_content(blocks: list) -> list:
     return [block.model_dump(exclude_none=True) if hasattr(block, "model_dump") else block for block in blocks]
 
 
-def _chat(history: list[tuple[str, str]], registry, client) -> str:
+def _chat(history: list[tuple[str, str]], registry, client, context: str = "") -> str:
     active_client = client or build_client()
     messages = to_api_messages(history)
     specs = registry.specs() if registry else None
     audit_start = len(registry.audit) if registry else 0
     corrected = False
+    system = SYSTEM_PROMPT
+    if context:
+        system += "\n\n【知识库参考】回答时如相关请优先引用；以下是全部可用内容，不要编造未提供的部分：\n" + context
 
     for _ in range(MAX_TOOL_ROUNDS + 1):
         response = active_client.messages.create(
             model=MODEL,
             max_tokens=MAX_TOKENS,
-            system=SYSTEM_PROMPT,
+            system=system,
             messages=messages,
             **({"tools": specs} if specs else {}),
         )

@@ -148,6 +148,39 @@ class ToolLoopTest(unittest.TestCase):
         self.assertEqual(reply, "好的")
         self.assertEqual(len(client.requests), 1)
 
+    def test_knowledge_hits_are_injected_into_system(self) -> None:
+        class FakeKnowledge:
+            def search(self, query):
+                assert query == "用什么数据库"
+                return [{"question": "Aster 用什么数据库？", "answer": "没有数据库"}]
+
+            def as_context(self, hits):
+                return "【Aster 用什么数据库？】\n没有数据库"
+
+        client = FakeClient([fake_response("没有数据库")])
+
+        reply = make_chat_reply(client=client, knowledge=FakeKnowledge())(
+            [("user", "用什么数据库")]
+        )
+
+        self.assertEqual(reply, "没有数据库")
+        self.assertIn("【Aster 用什么数据库？】", client.requests[0]["system"])
+        self.assertIn("不要编造", client.requests[0]["system"])
+
+    def test_empty_knowledge_hits_keep_plain_system(self) -> None:
+        class EmptyKnowledge:
+            def search(self, query):
+                return []
+
+            def as_context(self, hits):
+                return ""
+
+        client = FakeClient([fake_response("好的")])
+
+        make_chat_reply(client=client, knowledge=EmptyKnowledge())([("user", "hi")])
+
+        self.assertNotIn("知识库参考", client.requests[0]["system"])
+
     def test_echo_content_dumps_models_and_passes_plain_objects(self) -> None:
         class Model:
             def model_dump(self, exclude_none=True):
