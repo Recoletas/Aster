@@ -65,8 +65,34 @@ class ToolRegistryTest(unittest.TestCase):
         registry.execute("divide", {"divisor": 2.0})
 
         self.assertEqual(len(registry.audit), 2)
-        self.assertIn("-> {\"quotient\": 4.0}", registry.audit[0])
-        self.assertIn("error", registry.audit[1])
+        self.assertTrue(registry.audit[0]["ok"])
+        self.assertFalse(registry.audit[1]["ok"])
+        self.assertIn('"quotient": 4.0', registry.audit[0]["result"])
+
+    def test_reconcile_flags_claims_without_matching_results(self) -> None:
+        tool = Tool(
+            "create_ticket",
+            "创建工单",
+            DivideArgs,
+            lambda args: {"created": {"id": 1}},
+            claim_pattern=r"工单号\s*(\d+)",
+            result_id_pattern=r'"id":\s*(\d+)',
+        )
+        registry = ToolRegistry([tool])
+
+        self.assertEqual(registry.reconcile("工单号 1 已创建"), ["create_ticket: 1"])
+        registry.execute("create_ticket", {"dividend": 1.0, "divisor": 1.0})
+        self.assertEqual(registry.reconcile("工单号 1 已创建", since=0), [])
+        self.assertEqual(registry.reconcile("工单号 1 已创建", since=1), ["create_ticket: 1"])
+        self.assertEqual(
+            registry.reconcile("工单号 2 已创建", since=1),
+            ["create_ticket: 2"],
+        )
+
+    def test_tool_without_patterns_is_not_reconciled(self) -> None:
+        registry = ToolRegistry([Tool("divide", "两数相除", DivideArgs, lambda args: 1.0)])
+
+        self.assertEqual(registry.reconcile("随便说什么 42"), [])
 
     def test_build_default_registry_has_two_ticket_tools(self) -> None:
         registry = build_default_registry()

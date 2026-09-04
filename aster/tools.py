@@ -3,9 +3,13 @@
 The registry is the permission boundary: only registered tools exist for
 the model. Validation failures return an error string so the model can
 correct itself via the next tool_result instead of breaking the loop.
+Since M6 the audit also powers claim reconciliation: each tool may declare
+how references to its output appear in a reply and how its own ID shows up
+in results, so fabricated actions can be detected deterministically.
 """
 
 import json
+import re
 
 from pydantic import BaseModel, Field, ValidationError
 
@@ -21,11 +25,15 @@ class Tool:
         description: str,
         model: type[BaseModel],
         handler,
+        claim_pattern: str | None = None,
+        result_id_pattern: str | None = None,
     ) -> None:
         self.name = name
         self.description = description
         self.model = model
         self.handler = handler
+        self.claim_pattern = claim_pattern
+        self.result_id_pattern = result_id_pattern
 
     def spec(self) -> dict:
         """Tool definition in Messages API shape."""
@@ -53,7 +61,7 @@ class ToolRegistry:
 
     def __init__(self, tools: list[Tool]) -> None:
         self._tools = {tool.name: tool for tool in tools}
-        self.audit: list[str] = []
+        self.audit: list[dict] = []
 
     def specs(self) -> list[dict]:
         return [tool.spec() for tool in self._tools.values()]
@@ -64,12 +72,38 @@ class ToolRegistry:
         tool = self._tools.get(name)
         if tool is None:
             result = f"error: unknown tool {name}"
+            ok = False
         else:
             result = tool.execute(arguments)
+            ok = not result.startswith("error")
 
-        entry = f"{name} {json.dumps(arguments, ensure_ascii=False)} -> {result}"
-        self.audit.append(entry[:AUDIT_LIMIT])
+        self.audit.append({"tool": name, "arguments": arguments, "result": result, "ok": ok})
         return result
+
+    def reconcile(self, reply: str, since: int = 0) -> list[str]:
+        """Report reply claims that no tool execution since ``since`` produced.
+
+        A tool participates only if it declared both a claim pattern (how
+        references to its output look in a reply) and a result ID pattern.
+        """
+
+        problems: list[str] = []
+        for tool in self._tools.values():
+            if not tool.claim_pattern or not tool.result_id_pattern:
+                continue
+            claimed = set(re.findall(tool.claim_pattern, reply))
+            produced: set[str] = set()
+            for entry in self.audit[since:]:
+                if entry["tool"] == tool.name and entry["ok"]:
+                    produced.update(re.findall(tool.result_id_pattern, entry["result"]))
+            missing = claimed - produced
+            problems.extend(f"{tool.name}: {item}" for item in sorted(missing))
+        return problems
+
+    def note(self, tool: str, arguments: dict, result: str) -> None:
+        """Record a non-execution event (e.g. reconciliation) in the audit."""
+
+        self.audit.append({"tool": tool, "arguments": arguments, "result": result, "ok": True})
 
 
 class TicketBook:
@@ -123,12 +157,16 @@ def build_default_registry(book: TicketBook | None = None) -> ToolRegistry:
                 "创建一条客服工单，返回工单号",
                 CreateTicketArgs,
                 lambda args: book.create(args.subject, args.priority),
+                claim_pattern=r"工单号\s*[:：]?\s*(\d+)",
+                result_id_pattern=r'"id":\s*(\d+)',
             ),
             Tool(
                 "list_tickets",
                 "按状态列出客服工单",
                 ListTicketsArgs,
                 lambda args: book.list_tickets(args.status),
+                claim_pattern=r"工单号\s*[:：]?\s*(\d+)",
+                result_id_pattern=r'"id":\s*(\d+)',
             ),
         ]
     )

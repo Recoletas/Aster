@@ -90,7 +90,7 @@ def main() -> None:
         try:
             # imported here so offline runs need no SDK
             from aster.provider import make_chat_reply
-            from aster.tools import build_default_registry
+            from aster.tools import AUDIT_LIMIT, build_default_registry
         except ImportError as error:
             print(
                 f"error: --llm requires the anthropic SDK (pip install -r requirements.txt): {error}",
@@ -123,7 +123,8 @@ def main() -> None:
 
     if registry is not None:
         for entry in registry.audit:
-            print(f"tool: {entry}", file=sys.stderr)
+            line = f"{entry['tool']} {json.dumps(entry['arguments'], ensure_ascii=False)} -> {entry['result']}"
+            print(f"tool: {line[:AUDIT_LIMIT]}", file=sys.stderr)
 
 
 if __name__ == "__main__":

@@ -77,6 +77,8 @@ def _chat(history: list[tuple[str, str]], registry, client) -> str:
     active_client = client or build_client()
     messages = to_api_messages(history)
     specs = registry.specs() if registry else None
+    audit_start = len(registry.audit) if registry else 0
+    corrected = False
 
     for _ in range(MAX_TOOL_ROUNDS + 1):
         response = active_client.messages.create(
@@ -106,6 +108,33 @@ def _chat(history: list[tuple[str, str]], registry, client) -> str:
                     )
             continue
 
-        return extract_text(response)
+        text = extract_text(response)
+        if registry:
+            problems = registry.reconcile(text, since=audit_start)
+            if problems and not corrected:
+                corrected = True
+                registry.note(
+                    "__reconcile__",
+                    {"problems": problems},
+                    "correction requested",
+                )
+                messages.append(
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": (
+                                    "系统对账发现你的回复引用了没有对应工具调用的结果："
+                                    + "；".join(problems)
+                                    + "。请先调用工具核实；若无对应记录，明确告知用户该操作没有完成，不要虚构。"
+                                ),
+                            },
+                        ],
+                    }
+                )
+                continue
+
+        return text
 
     raise RuntimeError(f"tool calling: no final reply within {MAX_TOOL_ROUNDS} rounds")

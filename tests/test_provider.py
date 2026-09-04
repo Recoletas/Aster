@@ -40,13 +40,22 @@ class FakeClient:
 class FakeRegistry:
     def __init__(self):
         self.calls = []
+        self.audit = []
+        self.problems = []
 
     def specs(self):
         return [{"name": "create_ticket", "description": "d", "input_schema": {"type": "object"}}]
 
     def execute(self, name, arguments):
         self.calls.append((name, arguments))
+        self.audit.append({"tool": name, "arguments": arguments, "result": "created ticket 1", "ok": True})
         return "created ticket 1"
+
+    def reconcile(self, reply, since=0):
+        return self.problems
+
+    def note(self, tool, arguments, result):
+        self.audit.append({"tool": tool, "arguments": arguments, "result": result, "ok": True})
 
 
 class ProviderBoundaryTest(unittest.TestCase):
@@ -117,6 +126,27 @@ class ToolLoopTest(unittest.TestCase):
 
         with self.assertRaisesRegex(RuntimeError, "rounds"):
             make_chat_reply(FakeRegistry(), client=client)([("user", "hi")])
+
+    def test_reconciliation_triggers_one_corrective_round(self) -> None:
+        registry = FakeRegistry()
+        registry.problems = ["create_ticket: 2"]
+        client = FakeClient([fake_response("已创建工单号 2"), fake_response("该操作没有完成")])
+
+        reply = make_chat_reply(registry, client=client)([("user", "hi")])
+
+        self.assertEqual(reply, "该操作没有完成")
+        corrective = client.requests[1]["messages"][-1]
+        self.assertEqual(corrective["role"], "user")
+        self.assertIn("create_ticket: 2", corrective["content"][0]["text"])
+        self.assertTrue(any(entry["tool"] == "__reconcile__" for entry in registry.audit))
+
+    def test_clean_reply_needs_no_correction(self) -> None:
+        client = FakeClient([fake_response("好的")])
+
+        reply = make_chat_reply(FakeRegistry(), client=client)([("user", "hi")])
+
+        self.assertEqual(reply, "好的")
+        self.assertEqual(len(client.requests), 1)
 
     def test_echo_content_dumps_models_and_passes_plain_objects(self) -> None:
         class Model:
