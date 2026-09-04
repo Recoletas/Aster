@@ -57,6 +57,15 @@ def reply_to_console(reply: Reply) -> dict[str, str]:
     }
 
 
+def process_payload(payload: object, store: SessionStore) -> str:
+    """Validate and run one already-parsed payload through the flow."""
+
+    message = incoming_from_console(payload)
+    reply = store.handle(message)
+    output = reply_to_console(reply)
+    return json.dumps(output, ensure_ascii=False, separators=(",", ":"))
+
+
 def process_line(line: str, store: SessionStore) -> str:
     """Run one Console JSON line through the complete conversation flow."""
 
@@ -65,10 +74,51 @@ def process_line(line: str, store: SessionStore) -> str:
     except json.JSONDecodeError as error:
         raise ValueError(f"payload: invalid JSON ({error.msg})") from error
 
-    message = incoming_from_console(payload)
-    reply = store.handle(message)
-    output = reply_to_console(reply)
-    return json.dumps(output, ensure_ascii=False, separators=(",", ":"))
+    return process_payload(payload, store)
+
+
+def build_runtime(args) -> tuple[SessionStore, object | None]:
+    """Shared channel wiring: reply strategy, knowledge, and store assembly."""
+
+    knowledge = None
+    if getattr(args, "knowledge", None):
+        from aster.knowledge import KnowledgeBase
+
+        knowledge = KnowledgeBase.load(args.knowledge)
+
+    registry = None
+    reply_text = echo_reply
+    if args.llm:
+        try:
+            # imported here so offline runs need no SDK
+            from aster.provider import make_chat_reply
+            from aster.tools import build_default_registry
+        except ImportError as error:
+            print(
+                f"error: --llm requires the anthropic SDK (pip install -r requirements.txt): {error}",
+                file=sys.stderr,
+            )
+            raise SystemExit(2) from error
+
+        registry = build_default_registry()
+        reply_text = make_chat_reply(registry, knowledge=knowledge)
+
+    if args.store and os.path.exists(args.store):
+        store = load_store(args.store, reply_text=reply_text)
+    else:
+        store = SessionStore(reply_text=reply_text)
+
+    return store, registry
+
+
+def print_audit(registry) -> None:
+    """Tool/reconciliation events to stderr; stdout stays the JSON protocol."""
+
+    from aster.tools import AUDIT_LIMIT
+
+    for entry in registry.audit:
+        line = f"{entry['tool']} {json.dumps(entry['arguments'], ensure_ascii=False)} -> {entry['result']}"
+        print(f"tool: {line[:AUDIT_LIMIT]}", file=sys.stderr)
 
 
 def main() -> None:
@@ -88,33 +138,7 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    knowledge = None
-    if args.knowledge:
-        from aster.knowledge import KnowledgeBase
-
-        knowledge = KnowledgeBase.load(args.knowledge)
-
-    registry = None
-    reply_text = echo_reply
-    if args.llm:
-        try:
-            # imported here so offline runs need no SDK
-            from aster.provider import make_chat_reply
-            from aster.tools import AUDIT_LIMIT, build_default_registry
-        except ImportError as error:
-            print(
-                f"error: --llm requires the anthropic SDK (pip install -r requirements.txt): {error}",
-                file=sys.stderr,
-            )
-            raise SystemExit(2) from error
-
-        registry = build_default_registry()
-        reply_text = make_chat_reply(registry, knowledge=knowledge)
-
-    if args.store and os.path.exists(args.store):
-        store = load_store(args.store, reply_text=reply_text)
-    else:
-        store = SessionStore(reply_text=reply_text)
+    store, registry = build_runtime(args)
 
     for line in sys.stdin:
         line = line.strip()
@@ -132,9 +156,7 @@ def main() -> None:
             save_store(args.store, store)
 
     if registry is not None:
-        for entry in registry.audit:
-            line = f"{entry['tool']} {json.dumps(entry['arguments'], ensure_ascii=False)} -> {entry['result']}"
-            print(f"tool: {line[:AUDIT_LIMIT]}", file=sys.stderr)
+        print_audit(registry)
 
 
 if __name__ == "__main__":
