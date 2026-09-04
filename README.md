@@ -4,39 +4,43 @@ Aster 是一个由两人共同演进的智能体客服学习项目。项目希�
 
 ## 当前状态
 
-**M1–M5 已完成**：核心消息边界、最小对话应用层、会话持久化、真实 LLM 对话（MiniMax）和最小工具调用。
+**M1–M10 已完成**：消息边界、对话应用层、持久化、真实 LLM、工具调用与对账、RAG 关键词基线、Web 渠道、SQLite 存储、SSE 流式。
 
 当前已有：
 
-- 可运行的最小纵向链路：Console JSON line → 规范消息 → 会话状态 → 回复策略 → Console 输出；
+- 双渠道最小纵向链路：Console JSON line 与本地 Web 页面 → 规范消息 → 会话状态 → 回复策略 → 渠道输出；
 - 每会话交替历史，会话之间隔离；
-- 单 JSON 文件持久化、重启恢复、重复投递幂等（`--store`）；
+- SQLite 单文件持久化、重启恢复、重复投递幂等（`--store`）；
 - 真实 LLM 回复：MiniMax（Anthropic 兼容端点）；离线确定性 echo 是默认策略，`--llm` 切换；
-- 工具调用：pydantic 校验 + 注册表白名单 + 审计日志，内置内存工单工具（建单/查询）；
-- 25 个标准库风格测试（全部离线）。
+- 工具调用：pydantic 校验 + 注册表白名单 + 审计日志 + 声明-审计对账（虚构动作可检出并纠正），内置内存工单工具；
+- RAG 关键词基线：`--knowledge` 检索本地 FAQ 注入上下文（embedding 检索未做）；
+- SSE 流式回复：Web `--stream` 模式（仅纯聊天路径，工具回复非流式）；
+- 51 个标准库风格测试（全部离线）。
 
 当前没有：
 
-- 工具调用时机保证（模型自发决定，审计可检出遗漏）、流式输出、RAG、MCP、Web API；
-- 真实消息渠道、自动化或工单后端；
-- 数据库（持久化是可逆的 JSON 文件实验）与部署方案。
+- 工具调用时机保证（模型自发决定 + 对账兜底）、工具回复的流式、embedding RAG、MCP 客户端、鉴权；
+- 真实消息渠道（QQ/企微/钉钉/飞书）、人工坐席、工单后端；
+- 部署方案与 Web 框架（本地 stdlib HTTP）。
 
 ## 运行
 
 需要 Python 3.11+。离线模式仅用标准库；`--llm` 需要 `requirements.txt` 中的 `anthropic` SDK 和 `MINIMAX_API_KEY` 环境变量（密钥绝不入库）。第三方依赖一律装入项目本地 `.venv`，不要装进全局或 conda 环境：
 
 ```bash
-printf '%s\n' '{"room":"room-7","event":"msg-42","user":"alice","body":"hello"}' | python3 -m aster.console
-# {"room":"room-7","reply_to":"msg-42","body":"echo #1: hello"}
+# 离线 Console 渠道
+printf '%s\n' '{"room":"r","event":"m1","user":"a","body":"hello"}' | python3 -m aster.console
+# {"room":"r","reply_to":"m1","body":"echo #1: hello"}
+
+# LLM + 工具 + 知识库 + 持久化（Console）
+python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+export MINIMAX_API_KEY=sk-...
+printf '%s\n' '{"room":"r","event":"m1","user":"a","body":"帮我建个工单：打印机坏了，优先级高"}' | .venv/bin/python -m aster.console --llm --knowledge examples/kb.json --store data/sessions.db
+
+# 本地 Web 渠道（浏览器打开 http://127.0.0.1:8000）
+.venv/bin/python -m aster.web_channel --llm --stream --knowledge examples/kb.json --store data/sessions.db
 
 python3 -m unittest discover -s tests
-# 离线全绿；未安装 SDK 时 provider 测试自动跳过
-
-# 真实 LLM 模式
-python3 -m venv .venv
-.venv/bin/pip install -r requirements.txt
-export MINIMAX_API_KEY=sk-...
-printf '%s\n' '{"room":"r","event":"m1","user":"a","body":"你好"}' | .venv/bin/python -m aster.console --llm --store data/sessions.json
 ```
 
 ## 文档入口

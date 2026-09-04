@@ -91,7 +91,12 @@ Dify/RAGFlow 可在后续通过 API 做替换实验；只有当状态图、暂�
 2. **M2 最小 Agent 对话链路**：已按最小对话应用层落地——会话状态加依赖轮次的确定性回复；真实模型调用因缺少 API key 与 provider 决定尚未开始。
 3. **M3 会话持久化**：已用单 JSON 文件验证重启恢复、重复投递幂等和最小会话历史；数据库选型仍开放。
 4. **M4 最小 LLM 对话**：已接入 MiniMax（Anthropic 兼容端点、anthropic SDK、环境变量密钥、策略注入接缝）；流式与工具调用未开始。
-5. **M5 最小工具调用**：已落地——pydantic schema/校验 + anthropic SDK 工具循环 + 注册表白名单与审计日志；模型自发调用是非确定性的，可靠性策略（意图级 tool_choice/结果对账）为后续专项，见 `docs/research/tool-calling-survey.md`。
+5. **M5 最小工具调用**：已落地——pydantic schema/校验 + anthropic SDK 工具循环 + 注册表白名单与审计日志；模型自发调用是非确定性的，可靠性策略为后续专项，见 `docs/research/tool-calling-survey.md`。
+6. **M6 工具调用对账**：已落地——声明-审计比对 + 一轮纠正，虚构动作可确定性检出。
+7. **M7 RAG 关键词基线**：已落地——本地 JSON 知识库 + 关键词检索注入；embedding 检索待来源选定。
+8. **M8 Web 渠道**：已落地——stdlib HTTP 第二个 Adapter，未发现规范契约缺口；Web 框架选型继续推迟。
+9. **M9 SQLite 持久化**：已落地——stdlib sqlite3 单文件，替代 JSON 实验。
+10. **M10 SSE 流式**：已落地——纯聊天路径流式；工具回复保持非流式。
 
 进程外 Channel Adapter 不进入固定 Roadmap。只有 SDK/语言冲突、崩溃隔离、独立发布扩缩容或非可信第三方代码等条件出现后，才提出专门实验。
 
