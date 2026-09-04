@@ -1,5 +1,6 @@
 import json
 import os
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -30,7 +31,7 @@ class PersistenceTest(unittest.TestCase):
         store.handle(message("other room", "msg-3", room="room-8"))
 
         with tempfile.TemporaryDirectory() as directory:
-            path = os.path.join(directory, "sessions.json")
+            path = os.path.join(directory, "sessions.db")
             save_store(path, store)
             restored = load_store(path)
 
@@ -69,7 +70,7 @@ class PersistenceTest(unittest.TestCase):
 
     def test_roundtrip_preserves_reply_strategy(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            path = os.path.join(directory, "sessions.json")
+            path = os.path.join(directory, "sessions.db")
             store = SessionStore(reply_text=lambda history: "custom reply")
             store.handle(message("hello", "msg-1"))
             save_store(path, store)
@@ -79,9 +80,18 @@ class PersistenceTest(unittest.TestCase):
 
         self.assertEqual(following.text, "custom reply")
 
+    def test_retired_json_format_fails_loudly(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = os.path.join(directory, "legacy.json")
+            with open(path, "w", encoding="utf-8") as file:
+                file.write('{"sessions": []}')
+
+            with self.assertRaises(sqlite3.DatabaseError):
+                load_store(path)
+
     def test_console_restarts_continue_turn_numbering(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            path = os.path.join(directory, "sessions.json")
+            path = os.path.join(directory, "sessions.db")
             first_run = subprocess.run(
                 [sys.executable, "-B", "-m", "aster.console", "--store", path],
                 input=(
