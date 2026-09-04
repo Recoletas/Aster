@@ -68,6 +68,41 @@ def make_chat_reply(registry=None, client=None, knowledge=None):
     return reply_text
 
 
+def make_stream_reply(client=None, knowledge=None):
+    """Streaming strategy: yields text deltas (plain chat, no tools).
+
+    Tool rounds interleave with non-text blocks, so streaming is limited
+    to the plain chat path by design.
+    """
+
+    def reply_text_stream(history: list[tuple[str, str]]):
+        context = ""
+        if knowledge is not None and history:
+            hits = knowledge.search(history[-1][1])
+            context = knowledge.as_context(hits)
+
+        active_client = client or build_client()
+        with active_client.messages.stream(
+            model=MODEL,
+            max_tokens=MAX_TOKENS,
+            system=_system_prompt(context),
+            messages=to_api_messages(history),
+        ) as stream:
+            yield from stream.text_stream
+
+    return reply_text_stream
+
+
+def _system_prompt(context: str) -> str:
+    if not context:
+        return SYSTEM_PROMPT
+    return (
+        SYSTEM_PROMPT
+        + "\n\n【知识库参考】回答时如相关请优先引用；以下是全部可用内容，不要编造未提供的部分：\n"
+        + context
+    )
+
+
 def echo_content(blocks: list) -> list:
     """Assistant content as JSON-able dicts.
 
@@ -84,9 +119,7 @@ def _chat(history: list[tuple[str, str]], registry, client, context: str = "") -
     specs = registry.specs() if registry else None
     audit_start = len(registry.audit) if registry else 0
     corrected = False
-    system = SYSTEM_PROMPT
-    if context:
-        system += "\n\n【知识库参考】回答时如相关请优先引用；以下是全部可用内容，不要编造未提供的部分：\n" + context
+    system = _system_prompt(context)
 
     for _ in range(MAX_TOOL_ROUNDS + 1):
         response = active_client.messages.create(

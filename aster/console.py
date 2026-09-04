@@ -77,7 +77,16 @@ def process_line(line: str, store: SessionStore) -> str:
     return process_payload(payload, store)
 
 
-def build_runtime(args) -> tuple[SessionStore, object | None]:
+class Runtime:
+    """Assembled channel dependencies shared by all channel entrypoints."""
+
+    def __init__(self, store: SessionStore, registry, streaming: bool) -> None:
+        self.store = store
+        self.registry = registry
+        self.streaming = streaming
+
+
+def build_runtime(args) -> Runtime:
     """Shared channel wiring: reply strategy, knowledge, and store assembly."""
 
     knowledge = None
@@ -88,10 +97,11 @@ def build_runtime(args) -> tuple[SessionStore, object | None]:
 
     registry = None
     reply_text = echo_reply
+    streaming = False
     if args.llm:
         try:
             # imported here so offline runs need no SDK
-            from aster.provider import make_chat_reply
+            from aster.provider import make_chat_reply, make_stream_reply
             from aster.tools import build_default_registry
         except ImportError as error:
             print(
@@ -100,15 +110,21 @@ def build_runtime(args) -> tuple[SessionStore, object | None]:
             )
             raise SystemExit(2) from error
 
-        registry = build_default_registry()
-        reply_text = make_chat_reply(registry, knowledge=knowledge)
+        streaming = bool(getattr(args, "stream", False))
+        if streaming:
+            # streaming covers the plain chat path only; tools stay non-streaming
+            registry = None
+            reply_text = make_stream_reply(knowledge=knowledge)
+        else:
+            registry = build_default_registry()
+            reply_text = make_chat_reply(registry, knowledge=knowledge)
 
     if args.store and os.path.exists(args.store):
         store = load_store(args.store, reply_text=reply_text)
     else:
         store = SessionStore(reply_text=reply_text)
 
-    return store, registry
+    return Runtime(store, registry, streaming)
 
 
 def print_audit(registry) -> None:
@@ -138,7 +154,8 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    store, registry = build_runtime(args)
+    runtime = build_runtime(args)
+    store = runtime.store
 
     for line in sys.stdin:
         line = line.strip()
@@ -155,8 +172,8 @@ def main() -> None:
         if args.store:
             save_store(args.store, store)
 
-    if registry is not None:
-        print_audit(registry)
+    if runtime.registry is not None:
+        print_audit(runtime.registry)
 
 
 if __name__ == "__main__":

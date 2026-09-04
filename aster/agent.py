@@ -67,3 +67,33 @@ class SessionStore:
             in_reply_to_external_message_id=message.external_message_id,
             text=text,
         )
+
+    def stream_handle(self, message: IncomingMessage):
+        """Yield reply deltas, then record the completed exchange.
+
+        Works with strategies that return either a full string or an
+        iterator of deltas. A repeated external message id yields the
+        recorded text once and never re-calls the strategy.
+        """
+
+        session = self.session_for(message.conversation)
+        recorded_turn = session.turn_by_message_id.get(message.external_message_id)
+        if recorded_turn is not None:
+            yield self._reply(message, session.history[2 * recorded_turn - 1][1]).text
+            return
+
+        candidate = session.history + [("user", message.text)]
+        out = self._reply_text(candidate)
+        if isinstance(out, str):
+            chunks = [out]
+            yield out
+        else:
+            chunks = []
+            for delta in out:
+                chunks.append(delta)
+                yield delta
+
+        text = "".join(chunks)
+        session.history = candidate + [("assistant", text)]
+        turn = sum(1 for role, _ in session.history if role == "user")
+        session.turn_by_message_id[message.external_message_id] = turn

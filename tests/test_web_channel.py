@@ -76,6 +76,12 @@ class WebChannelTest(unittest.TestCase):
         self.assertEqual(status, 400)
         self.assertIn("invalid JSON", json.loads(raw)["error"])
 
+    def test_stream_endpoint_disabled_without_flag(self) -> None:
+        status, raw = self.request("/api/stream", self.payload("room-d", "m1", "hi"))
+
+        self.assertEqual(status, 400)
+        self.assertIn("streaming", json.loads(raw)["error"])
+
     def test_unknown_path_is_404(self) -> None:
         status, _ = self.request("/api/nope", b"{}")
 

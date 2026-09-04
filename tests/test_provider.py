@@ -2,7 +2,7 @@ import unittest
 from types import SimpleNamespace
 
 try:
-    from aster.provider import chat_reply, echo_content, extract_text, make_chat_reply, to_api_messages
+    from aster.provider import chat_reply, echo_content, extract_text, make_chat_reply, make_stream_reply, to_api_messages
 except ImportError:  # anthropic SDK not installed; offline-only environments skip these
     raise unittest.SkipTest("anthropic SDK not installed (use .venv for provider tests)")
 
@@ -56,6 +56,32 @@ class FakeRegistry:
 
     def note(self, tool, arguments, result):
         self.audit.append({"tool": tool, "arguments": arguments, "result": result, "ok": True})
+
+
+class FakeStream:
+    def __init__(self, chunks):
+        self.text_stream = iter(chunks)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        return False
+
+
+class FakeStreamMessages:
+    def __init__(self, client):
+        self._client = client
+
+    def stream(self, **kwargs):
+        self._client.requests.append(kwargs)
+        return FakeStream(["你", "好", "！"])
+
+
+class FakeStreamClient:
+    def __init__(self):
+        self.requests = []
+        self.messages = FakeStreamMessages(self)
 
 
 class ProviderBoundaryTest(unittest.TestCase):
@@ -180,6 +206,31 @@ class ToolLoopTest(unittest.TestCase):
         make_chat_reply(client=client, knowledge=EmptyKnowledge())([("user", "hi")])
 
         self.assertNotIn("知识库参考", client.requests[0]["system"])
+
+    def test_stream_reply_yields_deltas_with_expected_request(self) -> None:
+        client = FakeStreamClient()
+
+        deltas = list(make_stream_reply(client=client)([("user", "你好")]))
+
+        self.assertEqual(deltas, ["你", "好", "！"])
+        request = client.requests[0]
+        self.assertEqual(request["model"], "MiniMax-M3")
+        self.assertEqual(request["messages"], [{"role": "user", "content": "你好"}])
+        self.assertTrue(request["system"])
+
+    def test_stream_reply_injects_knowledge_context(self) -> None:
+        class FakeKnowledge:
+            def search(self, query):
+                return [{"question": "问题", "answer": "答案"}]
+
+            def as_context(self, hits):
+                return "【问题】\n答案"
+
+        client = FakeStreamClient()
+
+        list(make_stream_reply(client=client, knowledge=FakeKnowledge())([("user", "问题")]))
+
+        self.assertIn("【问题】", client.requests[0]["system"])
 
     def test_echo_content_dumps_models_and_passes_plain_objects(self) -> None:
         class Model:
