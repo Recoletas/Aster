@@ -6,7 +6,6 @@ from aster.console import incoming_from_console, process_line, reply_to_console
 from aster.core import echo_reply
 from aster.messages import ConversationRef, IncomingMessage
 
-
 VALID_PAYLOAD = {
     "room": "room-7",
     "event": "msg-42",
@@ -46,9 +45,8 @@ class MessageFlowTest(unittest.TestCase):
 
         store = SessionStore(reply_text=recording_reply)
         for payload, field in invalid_cases:
-            with self.subTest(field=field):
-                with self.assertRaisesRegex(ValueError, field):
-                    process_line(json.dumps(payload), store)
+            with self.subTest(field=field), self.assertRaisesRegex(ValueError, field):
+                process_line(json.dumps(payload), store)
 
         self.assertEqual(calls, [])
 

@@ -8,9 +8,9 @@ old JSON files fail loudly when opened as databases).
 import json
 import os
 import sqlite3
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 
-from aster.agent import ConversationSession, History, SessionStore
+from aster.agent import History, SessionStore
 from aster.core import echo_reply
 from aster.messages import ConversationRef
 
@@ -49,7 +49,7 @@ def save_store(path: str, store: SessionStore) -> None:
 
 def load_store(
     path: str,
-    reply_text: Callable[[History], str] = echo_reply,
+    reply_text: "Callable[[History], str | Iterator[str]]" = echo_reply,
 ) -> SessionStore:
     """Rebuild a SessionStore from a database written by save_store."""
 

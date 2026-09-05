@@ -27,8 +27,7 @@ class KnowledgeBase:
     def __init__(self, entries: list[dict]) -> None:
         self._entries = entries
         self._token_sets = [
-            set(tokenize(entry["question"] + " " + entry["answer"]))
-            for entry in entries
+            set(tokenize(entry["question"] + " " + entry["answer"])) for entry in entries
         ]
 
     @classmethod
@@ -45,7 +44,7 @@ class KnowledgeBase:
             return []
 
         scored = []
-        for entry, doc_tokens in zip(self._entries, self._token_sets):
+        for entry, doc_tokens in zip(self._entries, self._token_sets, strict=True):
             score = len(query_tokens & doc_tokens) / len(query_tokens)
             if score >= MIN_SCORE:
                 scored.append((score, entry))
@@ -56,6 +55,4 @@ class KnowledgeBase:
     def as_context(hits: list[dict]) -> str:
         """Format hits for the system prompt; empty when nothing hit."""
 
-        return "\n\n".join(
-            f"【{entry['question']}】\n{entry['answer']}" for entry in hits
-        )
+        return "\n\n".join(f"【{entry['question']}】\n{entry['answer']}" for entry in hits)

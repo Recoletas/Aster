@@ -2,13 +2,21 @@ import unittest
 from types import SimpleNamespace
 
 try:
-    from aster.provider import echo_content, extract_text, make_chat_reply, make_stream_reply, to_api_messages
-except ImportError:  # anthropic SDK not installed; offline-only environments skip these
-    raise unittest.SkipTest("anthropic SDK not installed (use .venv for provider tests)")
+    from aster.provider import (
+        echo_content,
+        extract_text,
+        make_chat_reply,
+        make_stream_reply,
+        to_api_messages,
+    )
+except ImportError as error:  # anthropic SDK not installed; offline-only environments skip these
+    raise unittest.SkipTest("anthropic SDK not installed (use .venv for provider tests)") from error
 
 
 def fake_response(text):
-    return SimpleNamespace(stop_reason="end_turn", content=[SimpleNamespace(type="text", text=text)])
+    return SimpleNamespace(
+        stop_reason="end_turn", content=[SimpleNamespace(type="text", text=text)]
+    )
 
 
 def tool_use_response():
@@ -16,7 +24,12 @@ def tool_use_response():
         stop_reason="tool_use",
         content=[
             SimpleNamespace(type="thinking", text="需要建工单", signature="sig"),
-            SimpleNamespace(type="tool_use", id="tu_1", name="create_ticket", input={"subject": "打印机", "priority": "high"}),
+            SimpleNamespace(
+                type="tool_use",
+                id="tu_1",
+                name="create_ticket",
+                input={"subject": "打印机", "priority": "high"},
+            ),
         ],
     )
 
@@ -48,7 +61,9 @@ class FakeRegistry:
 
     def execute(self, name, arguments):
         self.calls.append((name, arguments))
-        self.audit.append({"tool": name, "arguments": arguments, "result": "created ticket 1", "ok": True})
+        self.audit.append(
+            {"tool": name, "arguments": arguments, "result": "created ticket 1", "ok": True}
+        )
         return "created ticket 1"
 
     def reconcile(self, reply, since=0):

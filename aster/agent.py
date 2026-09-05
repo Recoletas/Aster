@@ -5,7 +5,7 @@ comes from a strategy callable (default: the deterministic echo); the
 layer is channel- and provider-independent.
 """
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 
 from aster.core import echo_reply
@@ -23,9 +23,16 @@ class ConversationSession:
 
 
 class SessionStore:
-    """All in-memory conversation sessions of one running process."""
+    """All in-memory conversation sessions of one running process.
 
-    def __init__(self, reply_text: Callable[[History], str] = echo_reply) -> None:
+    The reply strategy returns either the full text or an iterator of
+    deltas; stream_handle consumes both.
+    """
+
+    def __init__(
+        self,
+        reply_text: Callable[[History], "str | Iterator[str]"] = echo_reply,
+    ) -> None:
         self._reply_text = reply_text
         self._sessions: dict[ConversationRef, ConversationSession] = {}
 
@@ -59,7 +66,7 @@ class SessionStore:
             text=text,
         )
 
-    def stream_handle(self, message: IncomingMessage):
+    def stream_handle(self, message: IncomingMessage) -> Iterator[str]:
         """Yield reply deltas, then record the completed exchange.
 
         The single message flow of the store: works with strategies that

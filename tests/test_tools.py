@@ -1,9 +1,9 @@
 import unittest
 
 try:
-    from aster.tools import Tool, ToolRegistry, TicketBook, build_default_registry
-except ImportError:  # pydantic/SDK not installed; offline-only environments skip these
-    raise unittest.SkipTest("aster.tools needs pydantic (use .venv for tool tests)")
+    from aster.tools import TicketBook, Tool, ToolRegistry, build_default_registry
+except ImportError as error:  # pydantic/SDK not installed; offline-only environments skip these
+    raise unittest.SkipTest("aster.tools needs pydantic (use .venv for tool tests)") from error
 
 from pydantic import BaseModel, Field
 
@@ -40,7 +40,12 @@ class ToolTest(unittest.TestCase):
         self.assertEqual(calls, [])
 
     def test_valid_arguments_run_and_encode_result(self) -> None:
-        tool = Tool("divide", "两数相除", DivideArgs, lambda args: {"quotient": args.dividend / args.divisor})
+        tool = Tool(
+            "divide",
+            "两数相除",
+            DivideArgs,
+            lambda args: {"quotient": args.dividend / args.divisor},
+        )
 
         result = tool.execute({"dividend": 9.0, "divisor": 3.0})
 

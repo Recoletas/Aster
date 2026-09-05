@@ -6,9 +6,11 @@ MINIMAX_API_KEY environment variable and is never read from files here.
 """
 
 import os
-from collections.abc import Callable
+from collections.abc import Callable, Iterator, Sequence
+from typing import Any, Protocol, cast
 
 from anthropic import Anthropic
+from anthropic.types import MessageParam
 
 # The Python SDK appends /v1/messages itself, so the base URL must not
 # include /v1 (openmaic's JS AI SDK config uses the /anthropic/v1 form).
@@ -23,17 +25,64 @@ SYSTEM_PROMPT = (
     "严禁编造工单号、查询结果或工具输出。"
 )
 
+History = list[tuple[str, str]]
 
-def to_api_messages(history: list[tuple[str, str]]) -> list[dict[str, str]]:
+
+class RegistryLike(Protocol):
+    """What the tool loop needs from a tool registry."""
+
+    audit: list[dict[str, Any]]
+
+    def specs(self) -> list[dict[str, Any]]: ...
+
+    def execute(self, name: str, arguments: dict[str, Any]) -> str: ...
+
+    def reconcile(self, reply: str, since: int = 0) -> list[str]: ...
+
+    def note(self, tool: str, arguments: dict[str, Any], result: str) -> None: ...
+
+
+class KnowledgeLike(Protocol):
+    """What the strategies need from a knowledge base."""
+
+    def search(self, query: str) -> list[dict[str, Any]]: ...
+
+    def as_context(self, hits: list[dict[str, Any]]) -> str: ...
+
+
+class _BlockLike(Protocol):
+    type: str
+
+
+class _TextBlockLike(_BlockLike):
+    text: str
+
+
+class _ToolUseBlockLike(_BlockLike):
+    id: str
+    name: str
+    input: dict[str, Any]
+
+
+class _ResponseLike(Protocol):
+    content: Sequence[_BlockLike]
+
+
+def to_api_messages(history: History) -> list[MessageParam]:
     """Map Aster's alternating (role, text) history to Messages API shape."""
 
-    return [{"role": role, "content": text} for role, text in history]
+    return cast(
+        "list[MessageParam]",
+        [{"role": role, "content": text} for role, text in history],
+    )
 
 
-def extract_text(response: object) -> str:
+def extract_text(response: _ResponseLike) -> str:
     """Concatenate the text blocks of a Messages API response."""
 
-    return "".join(block.text for block in response.content if block.type == "text")
+    return "".join(
+        cast("_TextBlockLike", block).text for block in response.content if block.type == "text"
+    )
 
 
 def build_client() -> Anthropic:
@@ -44,23 +93,30 @@ def build_client() -> Anthropic:
     return Anthropic(api_key=api_key, base_url=BASE_URL, timeout=60.0, max_retries=2)
 
 
-def make_chat_reply(registry=None, client=None, knowledge=None):
+def make_chat_reply(
+    registry: RegistryLike | None = None,
+    client: Anthropic | None = None,
+    knowledge: KnowledgeLike | None = None,
+) -> Callable[[History], str]:
     """Build a reply strategy that may use registry tools and KB context."""
 
-    def reply_text(history: list[tuple[str, str]]) -> str:
+    def reply_text(history: History) -> str:
         return _chat(history, registry, client, context=_retrieved_context(knowledge, history))
 
     return reply_text
 
 
-def make_stream_reply(client=None, knowledge=None):
+def make_stream_reply(
+    client: Anthropic | None = None,
+    knowledge: KnowledgeLike | None = None,
+) -> Callable[[History], Iterator[str]]:
     """Streaming strategy: yields text deltas (plain chat, no tools).
 
     Tool rounds interleave with non-text blocks, so streaming is limited
     to the plain chat path by design.
     """
 
-    def reply_text_stream(history: list[tuple[str, str]]):
+    def reply_text_stream(history: History) -> Iterator[str]:
         active_client = client or build_client()
         with active_client.messages.stream(
             model=MODEL,
@@ -73,7 +129,7 @@ def make_stream_reply(client=None, knowledge=None):
     return reply_text_stream
 
 
-def _retrieved_context(knowledge, history: list[tuple[str, str]]) -> str:
+def _retrieved_context(knowledge: KnowledgeLike | None, history: History) -> str:
     """KB hits for the latest user message, or empty string."""
 
     if knowledge is None or not history:
@@ -91,17 +147,25 @@ def _system_prompt(context: str) -> str:
     )
 
 
-def echo_content(blocks: list) -> list:
+def echo_content(blocks: list[Any]) -> list[Any]:
     """Assistant content as JSON-able dicts.
 
     MiniMax requires thinking and tool_use blocks echoed back verbatim;
     SDK models become dicts, plain objects pass through (tests).
     """
 
-    return [block.model_dump(exclude_none=True) if hasattr(block, "model_dump") else block for block in blocks]
+    return [
+        block.model_dump(exclude_none=True) if hasattr(block, "model_dump") else block
+        for block in blocks
+    ]
 
 
-def _chat(history: list[tuple[str, str]], registry, client, context: str = "") -> str:
+def _chat(
+    history: History,
+    registry: RegistryLike | None,
+    client: Anthropic | None,
+    context: str = "",
+) -> str:
     """Run the model/tool loop for one strategy call and return the final text.
 
     Per round: send the conversation, then either apply a tool round, ask
@@ -116,15 +180,19 @@ def _chat(history: list[tuple[str, str]], registry, client, context: str = "") -
     corrected = False
 
     for _ in range(MAX_TOOL_ROUNDS + 1):
-        response = active_client.messages.create(
-            model=MODEL,
-            max_tokens=MAX_TOKENS,
-            system=system,
-            messages=messages,
-            **({"tools": specs} if specs else {}),
-        )
+        # the SDK's overloads are strict, so dynamic kwargs go through Any
+        kwargs: dict[str, Any] = {
+            "model": MODEL,
+            "max_tokens": MAX_TOKENS,
+            "system": system,
+            "messages": messages,
+        }
+        if specs:
+            kwargs["tools"] = specs
 
-        if specs and response.stop_reason == "tool_use":
+        response = active_client.messages.create(**kwargs)
+
+        if registry is not None and specs and response.stop_reason == "tool_use":
             _apply_tool_round(messages, response, registry)
             continue
 
@@ -138,29 +206,39 @@ def _chat(history: list[tuple[str, str]], registry, client, context: str = "") -
     raise RuntimeError(f"tool calling: no final reply within {MAX_TOOL_ROUNDS} rounds")
 
 
-def _apply_tool_round(messages: list, response, registry) -> None:
+def _apply_tool_round(
+    messages: list[MessageParam], response: _ResponseLike, registry: RegistryLike
+) -> None:
     """Echo the full assistant content back (MiniMax requires thinking
     blocks verbatim) and answer every tool_use with a tool_result."""
 
-    messages.append({"role": "assistant", "content": echo_content(response.content)})
+    messages.append({"role": "assistant", "content": echo_content(list(response.content))})
     for block in response.content:
-        if block.type == "tool_use":
-            result = registry.execute(block.name, dict(block.input))
-            messages.append(
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "tool_result",
-                            "tool_use_id": block.id,
-                            "content": result,
-                        },
-                    ],
-                }
-            )
+        if block.type != "tool_use":
+            continue
+        tool_use = cast("_ToolUseBlockLike", block)
+        result = registry.execute(tool_use.name, dict(tool_use.input))
+        messages.append(
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": tool_use.id,
+                        "content": result,
+                    },
+                ],
+            }
+        )
 
 
-def _reconciliation(registry, messages: list, text: str, audit_start: int, corrected: bool) -> bool:
+def _reconciliation(
+    registry: RegistryLike | None,
+    messages: list[MessageParam],
+    text: str,
+    audit_start: int,
+    corrected: bool,
+) -> bool:
     """Detect claims without matching executions; append one correction.
 
     Returns True when a correction was requested and the loop should run

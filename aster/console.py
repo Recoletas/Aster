@@ -4,12 +4,16 @@ import argparse
 import json
 import os
 import sys
+from collections.abc import Callable, Iterator
+from typing import TYPE_CHECKING
 
-from aster.agent import SessionStore
+from aster.agent import History, SessionStore
 from aster.core import echo_reply
 from aster.messages import ConversationRef, IncomingMessage, Reply
 from aster.storage import load_store, save_store
 
+if TYPE_CHECKING:
+    from aster.tools import ToolRegistry
 
 CHANNEL_ID = "console"
 
@@ -80,13 +84,18 @@ def process_line(line: str, store: SessionStore) -> str:
 class Runtime:
     """Assembled channel dependencies shared by all channel entrypoints."""
 
-    def __init__(self, store: SessionStore, registry, streaming: bool) -> None:
+    def __init__(
+        self,
+        store: SessionStore,
+        registry: "ToolRegistry | None",
+        streaming: bool,
+    ) -> None:
         self.store = store
         self.registry = registry
         self.streaming = streaming
 
 
-def build_runtime(args) -> Runtime:
+def build_runtime(args: argparse.Namespace) -> Runtime:
     """Shared channel wiring: reply strategy, knowledge, and store assembly."""
 
     knowledge = None
@@ -96,7 +105,7 @@ def build_runtime(args) -> Runtime:
         knowledge = KnowledgeBase.load(args.knowledge)
 
     registry = None
-    reply_text = echo_reply
+    reply_text: Callable[[History], str | Iterator[str]] = echo_reply
     streaming = False
     if args.llm:
         try:
@@ -105,7 +114,7 @@ def build_runtime(args) -> Runtime:
             from aster.tools import build_default_registry
         except ImportError as error:
             print(
-                f"error: --llm requires the anthropic SDK (pip install -r requirements.txt): {error}",
+                f'error: --llm requires the anthropic SDK (pip install -e ".[dev]"): {error}',
                 file=sys.stderr,
             )
             raise SystemExit(2) from error
@@ -127,13 +136,16 @@ def build_runtime(args) -> Runtime:
     return Runtime(store, registry, streaming)
 
 
-def print_audit(registry) -> None:
+def print_audit(registry: "ToolRegistry") -> None:
     """Tool/reconciliation events to stderr; stdout stays the JSON protocol."""
 
     from aster.tools import AUDIT_LIMIT
 
     for entry in registry.audit:
-        line = f"{entry['tool']} {json.dumps(entry['arguments'], ensure_ascii=False)} -> {entry['result']}"
+        line = (
+            f"{entry['tool']} {json.dumps(entry['arguments'], ensure_ascii=False)}"
+            f" -> {entry['result']}"
+        )
         print(f"tool: {line[:AUDIT_LIMIT]}", file=sys.stderr)
 
 
@@ -141,7 +153,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Fake console channel for Aster.")
     parser.add_argument(
         "--store",
-        help="JSON file used to persist conversation sessions across runs",
+        help="SQLite database file used to persist conversation sessions across runs",
     )
     parser.add_argument(
         "--llm",
@@ -150,7 +162,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--knowledge",
-        help="JSON knowledge base file whose entries are retrieved into the LLM context (needs --llm)",
+        help="JSON knowledge base file retrieved into the LLM context (needs --llm)",
     )
     args = parser.parse_args()
 

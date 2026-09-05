@@ -10,21 +10,25 @@ in results, so fabricated actions can be detected deterministically.
 
 import json
 import re
+from collections.abc import Callable
+from typing import Any, Generic, TypeVar
 
 from pydantic import BaseModel, Field, ValidationError
 
 AUDIT_LIMIT = 200
 
+M = TypeVar("M", bound=BaseModel)
 
-class Tool:
+
+class Tool(Generic[M]):
     """One callable capability with a pydantic-validated argument model."""
 
     def __init__(
         self,
         name: str,
         description: str,
-        model: type[BaseModel],
-        handler,
+        model: type[M],
+        handler: Callable[[M], Any],
         claim_pattern: str | None = None,
         result_id_pattern: str | None = None,
     ) -> None:
@@ -35,7 +39,7 @@ class Tool:
         self.claim_pattern = claim_pattern
         self.result_id_pattern = result_id_pattern
 
-    def spec(self) -> dict:
+    def spec(self) -> dict[str, Any]:
         """Tool definition in Messages API shape."""
 
         return {
@@ -44,7 +48,7 @@ class Tool:
             "input_schema": self.model.model_json_schema(),
         }
 
-    def execute(self, arguments: dict) -> str:
+    def execute(self, arguments: dict[str, Any]) -> str:
         try:
             args = self.model.model_validate(arguments)
         except ValidationError as error:
@@ -61,12 +65,12 @@ class ToolRegistry:
 
     def __init__(self, tools: list[Tool]) -> None:
         self._tools = {tool.name: tool for tool in tools}
-        self.audit: list[dict] = []
+        self.audit: list[dict[str, Any]] = []
 
-    def specs(self) -> list[dict]:
+    def specs(self) -> list[dict[str, Any]]:
         return [tool.spec() for tool in self._tools.values()]
 
-    def execute(self, name: str, arguments: dict) -> str:
+    def execute(self, name: str, arguments: dict[str, Any]) -> str:
         """Run one tool and record it; unknown tools fail without raising."""
 
         tool = self._tools.get(name)
@@ -100,7 +104,7 @@ class ToolRegistry:
             problems.extend(f"{tool.name}: {item}" for item in sorted(missing))
         return problems
 
-    def note(self, tool: str, arguments: dict, result: str) -> None:
+    def note(self, tool: str, arguments: dict[str, Any], result: str) -> None:
         """Record a non-execution event (e.g. reconciliation) in the audit."""
 
         self.audit.append({"tool": tool, "arguments": arguments, "result": result, "ok": True})
@@ -110,21 +114,22 @@ class TicketBook:
     """In-memory ticket store for the M5 experiment (not persisted)."""
 
     def __init__(self) -> None:
-        self._tickets: dict[int, dict] = {}
+        self._tickets: dict[int, dict[str, Any]] = {}
         self._next_id = 1
 
-    def create(self, subject: str, priority: str) -> dict:
+    def create(self, subject: str, priority: str) -> dict[str, Any]:
+        ticket_id = self._next_id
         ticket = {
-            "id": self._next_id,
+            "id": ticket_id,
             "subject": subject,
             "priority": priority,
             "status": "open",
         }
-        self._tickets[ticket["id"]] = ticket
+        self._tickets[ticket_id] = ticket
         self._next_id += 1
         return {"created": ticket}
 
-    def list_tickets(self, status: str) -> dict:
+    def list_tickets(self, status: str) -> dict[str, Any]:
         matches = [t for t in self._tickets.values() if t["status"] == status]
         return {"tickets": matches, "count": len(matches)}
 

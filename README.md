@@ -25,7 +25,7 @@ Aster 是一个由两人共同演进的智能体客服学习项目。项目希�
 
 ## 运行
 
-需要 Python 3.11+。离线模式仅用标准库；`--llm` 需要 `requirements.txt` 中的 `anthropic` SDK 和 `MINIMAX_API_KEY` 环境变量（密钥绝不入库）。第三方依赖一律装入项目本地 `.venv`，不要装进全局或 conda 环境：
+需要 Python 3.11+。离线模式仅用标准库；`--llm` 需要 `pyproject.toml` 声明的 `anthropic` SDK 和 `MINIMAX_API_KEY` 环境变量（密钥绝不入库）。第三方依赖一律装入项目本地 `.venv`，不要装进全局或 conda 环境：
 
 ```bash
 # 离线 Console 渠道
@@ -33,14 +33,14 @@ printf '%s\n' '{"room":"r","event":"m1","user":"a","body":"hello"}' | python3 -m
 # {"room":"r","reply_to":"m1","body":"echo #1: hello"}
 
 # LLM + 工具 + 知识库 + 持久化（Console）
-python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+python3 -m venv .venv && .venv/bin/pip install -e ".[dev]"
 export MINIMAX_API_KEY=sk-...
 printf '%s\n' '{"room":"r","event":"m1","user":"a","body":"帮我建个工单：打印机坏了，优先级高"}' | .venv/bin/python -m aster.console --llm --knowledge examples/kb.json --store data/sessions.db
 
 # 本地 Web 渠道（浏览器打开 http://127.0.0.1:8000）
 .venv/bin/python -m aster.web_channel --llm --stream --knowledge examples/kb.json --store data/sessions.db
 
-python3 -m unittest discover -s tests
+make check   # = ruff lint + format 检查 + mypy + 全部测试（CI 同款）
 ```
 
 ## 文档入口

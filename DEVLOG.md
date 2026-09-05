@@ -504,3 +504,38 @@
 ### 未解决问题
 
 - 无新增。
+
+## 2026-09-04 — 工程化基建：pyproject、ruff、mypy、Makefile、CI
+
+### 本次目标
+
+人工指示"继续优化，要工程化那种"。补齐正式 Python 项目的工程底座，全部装在 `.venv`，全局环境不动。
+
+### 实际完成
+
+- `pyproject.toml`：项目元数据、运行依赖（anthropic、pydantic）、dev 依赖组（ruff、mypy）、ruff/mypy 配置；`requirements.txt` 删除，依赖入口统一为 `pip install -e ".[dev]"`；
+- 新增 `aster/__init__.py`（版本 0.1.0）——此前 M1"不建空 `__init__.py`"的最小化选择让位于正式打包；
+- ruff（lint + format）：清理 29 处（导入排序、长行、未用导入、`zip` 缺 `strict=`、`contextlib.suppress`、测试 raise-from 等）；
+- mypy（`disallow_untyped_defs`）19 处清零：provider 为 SDK 响应/注册表/知识库定义最小结构协议（不引入对上层模块的反向依赖），消息列表改用 SDK `MessageParam`；`Tool` 改为 `Generic[M]` 使 handler 收到具体模型实例类型；策略类型在 SessionStore/load_store/装配层统一放宽为 `str | Iterator[str]`（流式与本无关系，是类型声明过窄）；
+- `Makefile`：`make check` = lint + type + test，另有 `fmt`/`run-console`/`run-web`；
+- `.github/workflows/ci.yml`：push/PR 上跑与本地完全相同的质量门；
+- README/AGENTS/CONTRIBUTING 同步：依赖入口、质量门命令、提交前检查。
+
+### 关键决策或发现
+
+- mypy 的价值立竿见影：策略类型声明过窄（只写了 `-> str`）被流式策略当场暴露，顺带统一了存储层的策略类型。
+- Protocol 建模让 provider 保持"不反向依赖上层"的 import 方向，同时获得完整类型检查——结构化类型优于为类型检查引入导入耦合。
+
+### 执行过的验证
+
+- `ruff check` / `ruff format --check` / `mypy`：全部零问题；
+- 51 个测试（`.venv`）与 40+1 跳过（裸 python）全部通过；
+- `pip install -e ".[dev]"` 成功并可 `import aster`（0.1.0）。
+
+### 未解决问题
+
+- CI 在 GitHub 的首次运行结果待推送后观察（本地执行的是同一组命令）。
+
+### 下一步建议
+
+停止。剩余方向不变：真实渠道凭据、embedding 来源、意图分类时机、部署形态。

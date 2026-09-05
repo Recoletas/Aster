@@ -8,8 +8,9 @@ boundary validation and session semantics apply.
 
 import argparse
 import json
-
+from contextlib import suppress
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from typing import Any
 
 from aster.agent import SessionStore
 from aster.console import build_runtime, incoming_from_console, process_payload
@@ -23,7 +24,8 @@ PAGE = """<!doctype html>
 <title>Aster 本地客服</title>
 <style>
   body { font-family: system-ui, sans-serif; max-width: 640px; margin: 2rem auto; padding: 0 1rem; }
-  #log { border: 1px solid #ccc; border-radius: 8px; min-height: 300px; padding: 1rem; margin-bottom: 1rem; }
+  #log { border: 1px solid #ccc; border-radius: 8px; min-height: 300px;
+         padding: 1rem; margin-bottom: 1rem; }
   #log p { margin: 0.4rem 0; }
   form { display: flex; gap: 0.5rem; }
   input { flex: 1; padding: 0.5rem; }
@@ -58,7 +60,9 @@ document.getElementById('f').onsubmit = async (event) => {
     const res = await fetch('/api/message', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({room: 'web-1', event: 'web-' + Date.now(), user: 'webuser', body: text}),
+      body: JSON.stringify({
+        room: 'web-1', event: 'web-' + Date.now(), user: 'webuser', body: text,
+      }),
     });
     const data = await res.json();
     add(res.ok ? '客服' : '错误', res.ok ? data.body : data.error);
@@ -79,7 +83,7 @@ class ChatHandler(BaseHTTPRequestHandler):
     save_path: str | None = None
     streaming: bool = False
 
-    def log_message(self, *args) -> None:  # keep test/CLI output quiet
+    def log_message(self, *args: object) -> None:  # keep test/CLI output quiet
         pass
 
     def do_GET(self) -> None:
@@ -147,7 +151,7 @@ class ChatHandler(BaseHTTPRequestHandler):
         if self.save_path:
             save_store(self.save_path, self.store)
 
-    def _read_payload(self):
+    def _read_payload(self) -> tuple[object, None] | tuple[None, tuple[int, bytes]]:
         """Parse the request body; returns (payload, None) or (None, error)."""
 
         length = int(self.headers.get("Content-Length", 0))
@@ -156,8 +160,8 @@ class ChatHandler(BaseHTTPRequestHandler):
         except (json.JSONDecodeError, UnicodeDecodeError) as problem:
             return None, (400, self._error(f"payload: invalid JSON ({problem})"))
 
-    def _sse(self, data: dict) -> None:
-        self.wfile.write(f"data: {json.dumps(data, ensure_ascii=False)}\n\n".encode("utf-8"))
+    def _sse(self, data: dict[str, Any]) -> None:
+        self.wfile.write(f"data: {json.dumps(data, ensure_ascii=False)}\n\n".encode())
         self.wfile.flush()
 
     @staticmethod
@@ -180,7 +184,8 @@ PAGE_STREAM = """<!doctype html>
 <title>Aster 本地客服（流式）</title>
 <style>
   body { font-family: system-ui, sans-serif; max-width: 640px; margin: 2rem auto; padding: 0 1rem; }
-  #log { border: 1px solid #ccc; border-radius: 8px; min-height: 300px; padding: 1rem; margin-bottom: 1rem; }
+  #log { border: 1px solid #ccc; border-radius: 8px; min-height: 300px;
+         padding: 1rem; margin-bottom: 1rem; }
   #log p { margin: 0.4rem 0; white-space: pre-wrap; }
   form { display: flex; gap: 0.5rem; }
   input { flex: 1; padding: 0.5rem; }
@@ -216,7 +221,9 @@ document.getElementById('f').onsubmit = async (event) => {
     const res = await fetch('/api/stream', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({room: 'web-stream', event: 'web-' + Date.now(), user: 'webuser', body: text}),
+      body: JSON.stringify({
+        room: 'web-stream', event: 'web-' + Date.now(), user: 'webuser', body: text,
+      }),
     });
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
@@ -245,7 +252,7 @@ document.getElementById('f').onsubmit = async (event) => {
 """
 
 
-def make_server(args) -> ThreadingHTTPServer:
+def make_server(args: argparse.Namespace) -> ThreadingHTTPServer:
     runtime = build_runtime(args)
     handler = type(
         "BoundChatHandler",
@@ -262,18 +269,22 @@ def make_server(args) -> ThreadingHTTPServer:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Local web chat channel for Aster.")
     parser.add_argument("--port", type=int, default=8000)
-    parser.add_argument("--store", help="SQLite database used to persist conversation sessions across runs")
-    parser.add_argument("--llm", action="store_true", help="reply with MiniMax (requires MINIMAX_API_KEY)")
-    parser.add_argument("--stream", action="store_true", help="SSE streaming replies (plain chat path, needs --llm)")
+    parser.add_argument(
+        "--store", help="SQLite database used to persist conversation sessions across runs"
+    )
+    parser.add_argument(
+        "--llm", action="store_true", help="reply with MiniMax (requires MINIMAX_API_KEY)"
+    )
+    parser.add_argument(
+        "--stream", action="store_true", help="SSE streaming replies (plain chat path, needs --llm)"
+    )
     parser.add_argument("--knowledge", help="JSON knowledge base file (needs --llm)")
     args = parser.parse_args()
 
     server = make_server(args)
     print(f"Aster web channel serving on http://127.0.0.1:{server.server_address[1]}")
-    try:
+    with suppress(KeyboardInterrupt):
         server.serve_forever()
-    except KeyboardInterrupt:
-        pass
 
 
 if __name__ == "__main__":
