@@ -539,3 +539,32 @@
 ### 下一步建议
 
 停止。剩余方向不变：真实渠道凭据、embedding 来源、意图分类时机、部署形态。
+
+## 2026-09-04 — 协作流程工程化：issue/PR/评审/分支与提交规范
+
+### 本次目标
+
+人工指出工程化还缺协作侧规则。补齐 GitHub 协作实体：issue 模板、PR 模板、评审规则、分支与 commit 规范、依赖自动更新。
+
+### 实际完成
+
+- `.github/ISSUE_TEMPLATE/`：「里程碑任务」（目标/范围/非目标/验收标准）与「Bug 报告」（复现步骤/影响面下拉/环境）两个 YAML 表单；空白 issue 禁用，讨论引向 Discussions；
+- `.github/PULL_REQUEST_TEMPLATE.md`：对应 issue、改动说明、**验收标准逐条回应**、实际执行的验证、未验证项、架构影响；
+- `.github/CODEOWNERS`：全仓库 `@Recoletas`，PR 自动请求 owner 评审，至少一人验收才合并；
+- `.github/dependabot.yml`：pip 与 GitHub Actions 每周更新，dev 依赖分组；
+- `CONTRIBUTING.md` 重写为完整协作流程：issue 起点规则、分支命名（`feat/24-xxx`）、Conventional Commits、PR 规则（CI 绿才评审）、squash merge 与删分支、label 约定、架构问题走 ADR 的路径；
+- `scripts/seed-labels.sh`：标签种子一键脚本（gh CLI 未装，留作任一成员首次运行）；
+- README 参与方式同步。
+
+### 执行过的验证
+
+- 全部 `.github` YAML 经 `yaml.safe_load` 解析有效；
+- gh CLI 本机不可用（命令不存在），标签种子无法立即执行——已如实记录，非阻塞（模板引用的标签 GitHub 会在首次使用时自动创建）。
+
+### 未解决问题
+
+- GitHub 网页侧设置（如 main 分支保护规则 "require PR before merge"）无法经文件配置，需人工在 Settings → Branches 开启；这是"PR 不直接 push main"真正生效的开关。
+
+### 下一步建议
+
+人工在 GitHub 开启 main 分支保护；运行 scripts/seed-labels.sh（装 gh 后）。

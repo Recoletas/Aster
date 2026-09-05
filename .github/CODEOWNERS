@@ -1,0 +1,3 @@
+# 两人团队：所有改动都需要至少一位 owner 的验收确认。
+# CODEOWNERS 保证 PR 的 review request 自动发给 owner。
+* @Recoletas

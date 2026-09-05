@@ -60,7 +60,7 @@ Coding Agent 还必须先阅读 [AGENTS.md](AGENTS.md)。
 
 ## 参与方式
 
-从 `PLAN.md` 中当前里程碑选择一项小任务；开始前写清目标、范围、非目标和验收标准，提交前执行适合该里程碑的最少验证并自审改动。详细流程见 `CONTRIBUTING.md`。
+协作走完整流程：**issue（用模板）→ 分支 → Conventional Commits → PR（逐条回应验收标准）→ owner 验收 → squash 合并**。不直接 push 到 `main`。分支命名、commit 类型、label 约定见 [CONTRIBUTING.md](CONTRIBUTING.md)；工程化入口：`make check`（提交前质量门）。详细流程见 `CONTRIBUTING.md`。
 
 ## 许可证
 

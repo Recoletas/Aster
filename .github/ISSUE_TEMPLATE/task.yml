@@ -1,0 +1,37 @@
+name: 里程碑任务
+description: 认领或提出一个里程碑内的小任务（目标、范围、非目标、验收标准）
+labels: ["task"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Aster 只接受小步任务：一个 issue 应当能独立验收。跨模块或高成本的技术选型不要开在这里，
+        先在 issue 里写候选与权衡，经确认后走 ADR（见 CONTRIBUTING 的"架构问题"一节）。
+  - type: input
+    id: milestone
+    attributes:
+      label: 所属里程碑
+      description: 如 M5 工具调用；新里程碑请先在 PLAN.md 登记后再开任务。
+    validations:
+      required: true
+  - type: textarea
+    id: goal
+    attributes:
+      label: 目标与范围
+      description: 这个任务完成后，什么可以被独立验证？
+    validations:
+      required: true
+  - type: textarea
+    id: non-goal
+    attributes:
+      label: 明确不做什么
+      description: 防止范围蔓延。
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: 验收标准
+      description: 逐条列出，PR 必须逐条回应。
+    validations:
+      required: true

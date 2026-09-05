@@ -1,0 +1,53 @@
+name: Bug 报告
+description: 功能行为与预期不符时使用
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        提交前请先跑一遍 `make check`，并搜索是否已有重复 issue。
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: 发生了什么
+      description: 同时给出你预期的行为。
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: 复现步骤
+      placeholder: |
+        1. 使用哪个渠道与参数（如 `--llm --store data/sessions.db`）
+        2. 发送了什么输入
+        3. 看到什么输出
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: 影响范围
+      options:
+        - Console 渠道
+        - Web 渠道
+        - LLM provider（MiniMax）
+        - 工具调用/对账
+        - 知识库检索
+        - 持久化（SQLite）
+        - 工程化（构建/CI/依赖）
+        - 文档
+    validations:
+      required: true
+  - type: input
+    id: env
+    attributes:
+      label: 环境
+      description: Python 版本、WSL2/系统、commit SHA
+      placeholder: "Python 3.11.11 / WSL2 Ubuntu / e79f38a"
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: 日志或报错
+      description: 贴出 stderr 输出。密钥必须先抹掉。
