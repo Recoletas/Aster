@@ -2,7 +2,7 @@ import unittest
 from types import SimpleNamespace
 
 try:
-    from aster.provider import chat_reply, echo_content, extract_text, make_chat_reply, make_stream_reply, to_api_messages
+    from aster.provider import echo_content, extract_text, make_chat_reply, make_stream_reply, to_api_messages
 except ImportError:  # anthropic SDK not installed; offline-only environments skip these
     raise unittest.SkipTest("anthropic SDK not installed (use .venv for provider tests)")
 
@@ -105,7 +105,7 @@ class ProviderBoundaryTest(unittest.TestCase):
 
         self.assertEqual(extract_text(response), "AC")
 
-    def test_chat_reply_sends_expected_request_and_extracts_text(self) -> None:
+    def test_plain_chat_sends_expected_request_and_extracts_text(self) -> None:
         response = SimpleNamespace(
             stop_reason="end_turn",
             content=[
@@ -116,7 +116,7 @@ class ProviderBoundaryTest(unittest.TestCase):
         )
         client = FakeClient([response])
 
-        reply = chat_reply([("user", "你好")], client=client)
+        reply = make_chat_reply(client=client)([("user", "你好")])
 
         self.assertEqual(reply, "好的，已记录。")
         request = client.requests[0]

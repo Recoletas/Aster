@@ -44,26 +44,11 @@ def build_client() -> Anthropic:
     return Anthropic(api_key=api_key, base_url=BASE_URL, timeout=60.0, max_retries=2)
 
 
-def chat_reply(history: list[tuple[str, str]], client=None) -> str:
-    """Return the assistant text for the alternating conversation history.
-
-    Plain model call without tools (M4 behavior). ``client`` is a test
-    seam; production calls build one from the environment.
-    """
-
-    return _chat(history, None, client)
-
-
 def make_chat_reply(registry=None, client=None, knowledge=None):
     """Build a reply strategy that may use registry tools and KB context."""
 
     def reply_text(history: list[tuple[str, str]]) -> str:
-        context = ""
-        if knowledge is not None and history:
-            hits = knowledge.search(history[-1][1])
-            context = knowledge.as_context(hits)
-
-        return _chat(history, registry, client, context=context)
+        return _chat(history, registry, client, context=_retrieved_context(knowledge, history))
 
     return reply_text
 
@@ -76,21 +61,24 @@ def make_stream_reply(client=None, knowledge=None):
     """
 
     def reply_text_stream(history: list[tuple[str, str]]):
-        context = ""
-        if knowledge is not None and history:
-            hits = knowledge.search(history[-1][1])
-            context = knowledge.as_context(hits)
-
         active_client = client or build_client()
         with active_client.messages.stream(
             model=MODEL,
             max_tokens=MAX_TOKENS,
-            system=_system_prompt(context),
+            system=_system_prompt(_retrieved_context(knowledge, history)),
             messages=to_api_messages(history),
         ) as stream:
             yield from stream.text_stream
 
     return reply_text_stream
+
+
+def _retrieved_context(knowledge, history: list[tuple[str, str]]) -> str:
+    """KB hits for the latest user message, or empty string."""
+
+    if knowledge is None or not history:
+        return ""
+    return knowledge.as_context(knowledge.search(history[-1][1]))
 
 
 def _system_prompt(context: str) -> str:
@@ -114,12 +102,18 @@ def echo_content(blocks: list) -> list:
 
 
 def _chat(history: list[tuple[str, str]], registry, client, context: str = "") -> str:
+    """Run the model/tool loop for one strategy call and return the final text.
+
+    Per round: send the conversation, then either apply a tool round, ask
+    for one reconciliation correction, or accept the reply.
+    """
+
     active_client = client or build_client()
     messages = to_api_messages(history)
     specs = registry.specs() if registry else None
+    system = _system_prompt(context)
     audit_start = len(registry.audit) if registry else 0
     corrected = False
-    system = _system_prompt(context)
 
     for _ in range(MAX_TOOL_ROUNDS + 1):
         response = active_client.messages.create(
@@ -131,51 +125,69 @@ def _chat(history: list[tuple[str, str]], registry, client, context: str = "") -
         )
 
         if specs and response.stop_reason == "tool_use":
-            messages.append({"role": "assistant", "content": echo_content(response.content)})
-            for block in response.content:
-                if block.type == "tool_use":
-                    result = registry.execute(block.name, dict(block.input))
-                    messages.append(
-                        {
-                            "role": "user",
-                            "content": [
-                                {
-                                    "type": "tool_result",
-                                    "tool_use_id": block.id,
-                                    "content": result,
-                                },
-                            ],
-                        }
-                    )
+            _apply_tool_round(messages, response, registry)
             continue
 
         text = extract_text(response)
-        if registry:
-            problems = registry.reconcile(text, since=audit_start)
-            if problems and not corrected:
-                corrected = True
-                registry.note(
-                    "__reconcile__",
-                    {"problems": problems},
-                    "correction requested",
-                )
-                messages.append(
-                    {
-                        "role": "user",
-                        "content": [
-                            {
-                                "type": "text",
-                                "text": (
-                                    "系统对账发现你的回复引用了没有对应工具调用的结果："
-                                    + "；".join(problems)
-                                    + "。请先调用工具核实；若无对应记录，明确告知用户该操作没有完成，不要虚构。"
-                                ),
-                            },
-                        ],
-                    }
-                )
-                continue
+        if _reconciliation(registry, messages, text, audit_start, corrected):
+            corrected = True
+            continue
 
         return text
 
     raise RuntimeError(f"tool calling: no final reply within {MAX_TOOL_ROUNDS} rounds")
+
+
+def _apply_tool_round(messages: list, response, registry) -> None:
+    """Echo the full assistant content back (MiniMax requires thinking
+    blocks verbatim) and answer every tool_use with a tool_result."""
+
+    messages.append({"role": "assistant", "content": echo_content(response.content)})
+    for block in response.content:
+        if block.type == "tool_use":
+            result = registry.execute(block.name, dict(block.input))
+            messages.append(
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": block.id,
+                            "content": result,
+                        },
+                    ],
+                }
+            )
+
+
+def _reconciliation(registry, messages: list, text: str, audit_start: int, corrected: bool) -> bool:
+    """Detect claims without matching executions; append one correction.
+
+    Returns True when a correction was requested and the loop should run
+    another round; at most one correction happens per strategy call.
+    """
+
+    if registry is None or corrected:
+        return False
+
+    problems = registry.reconcile(text, since=audit_start)
+    if not problems:
+        return False
+
+    registry.note("__reconcile__", {"problems": problems}, "correction requested")
+    messages.append(
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "text",
+                    "text": (
+                        "系统对账发现你的回复引用了没有对应工具调用的结果："
+                        + "；".join(problems)
+                        + "。请先调用工具核实；若无对应记录，明确告知用户该操作没有完成，不要虚构。"
+                    ),
+                },
+            ],
+        }
+    )
+    return True

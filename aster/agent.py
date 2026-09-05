@@ -40,25 +40,16 @@ class SessionStore:
         return dict(self._sessions)
 
     def handle(self, message: IncomingMessage) -> Reply:
-        """Record an inbound message and reply using conversation state.
+        """Reply to one validated message and return the canonical Reply.
 
-        The strategy sees the history candidate but the session is only
-        updated on success, so a failed call leaves nothing half-written.
-        A repeated external message id is answered from the assistant text
-        already recorded for its turn, without calling the strategy again.
+        The full-text view of stream_handle, with the same guarantees: the
+        strategy sees the history candidate, the session only updates on
+        success, and a repeated external message id replays its recorded
+        turn without calling the strategy again.
         """
 
-        session = self.session_for(message.conversation)
-        recorded_turn = session.turn_by_message_id.get(message.external_message_id)
-        if recorded_turn is not None:
-            return self._reply(message, session.history[2 * recorded_turn - 1][1])
-
-        candidate = session.history + [("user", message.text)]
-        assistant_text = self._reply_text(candidate)
-        session.history = candidate + [("assistant", assistant_text)]
-        turn = sum(1 for role, _ in session.history if role == "user")
-        session.turn_by_message_id[message.external_message_id] = turn
-        return self._reply(message, assistant_text)
+        text = "".join(self.stream_handle(message))
+        return self._reply(message, text)
 
     @staticmethod
     def _reply(message: IncomingMessage, text: str) -> Reply:
@@ -71,9 +62,10 @@ class SessionStore:
     def stream_handle(self, message: IncomingMessage):
         """Yield reply deltas, then record the completed exchange.
 
-        Works with strategies that return either a full string or an
-        iterator of deltas. A repeated external message id yields the
-        recorded text once and never re-calls the strategy.
+        The single message flow of the store: works with strategies that
+        return either a full string or an iterator of deltas. A repeated
+        external message id yields the recorded text once and never
+        re-calls the strategy.
         """
 
         session = self.session_for(message.conversation)
