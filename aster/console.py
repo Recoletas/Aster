@@ -13,6 +13,7 @@ from aster.messages import ConversationRef, IncomingMessage, Reply
 from aster.storage import load_store, save_store
 
 if TYPE_CHECKING:
+    from aster.provider import KnowledgeLike
     from aster.tools import ToolRegistry
 
 CHANNEL_ID = "console"
@@ -98,7 +99,7 @@ class Runtime:
 def build_runtime(args: argparse.Namespace) -> Runtime:
     """Shared channel wiring: reply strategy, knowledge, and store assembly."""
 
-    knowledge = None
+    knowledge: KnowledgeLike | None = None
     if getattr(args, "knowledge", None):
         from aster.knowledge import KnowledgeBase
 
@@ -118,6 +119,12 @@ def build_runtime(args: argparse.Namespace) -> Runtime:
                 file=sys.stderr,
             )
             raise SystemExit(2) from error
+
+        if getattr(args, "knowledge", None) and args.kb_mode == "embedding":
+            from aster.embeddings import embeddings_from_env
+            from aster.knowledge import EmbeddingKnowledgeBase
+
+            knowledge = EmbeddingKnowledgeBase.load(args.knowledge, embeddings_from_env())
 
         streaming = bool(getattr(args, "stream", False))
         if streaming:
@@ -163,6 +170,12 @@ def main() -> None:
     parser.add_argument(
         "--knowledge",
         help="JSON knowledge base file retrieved into the LLM context (needs --llm)",
+    )
+    parser.add_argument(
+        "--kb-mode",
+        choices=("keyword", "embedding"),
+        default="keyword",
+        help="knowledge retrieval mode; embedding uses MiniMax embo-01 (needs MINIMAX_API_KEY)",
     )
     args = parser.parse_args()
 

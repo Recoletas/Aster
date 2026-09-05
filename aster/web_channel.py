@@ -279,6 +279,12 @@ def main() -> None:
         "--stream", action="store_true", help="SSE streaming replies (plain chat path, needs --llm)"
     )
     parser.add_argument("--knowledge", help="JSON knowledge base file (needs --llm)")
+    parser.add_argument(
+        "--kb-mode",
+        choices=("keyword", "embedding"),
+        default="keyword",
+        help="knowledge retrieval mode; embedding uses MiniMax embo-01 (needs MINIMAX_API_KEY)",
+    )
     args = parser.parse_args()
 
     server = make_server(args)

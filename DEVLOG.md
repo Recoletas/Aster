@@ -568,3 +568,37 @@
 ### 下一步建议
 
 人工在 GitHub 开启 main 分支保护；运行 scripts/seed-labels.sh（装 gh 后）。
+
+## 2026-09-04 — M11 embedding RAG（MiniMax embo-01）
+
+### 本次目标
+
+人工指定 embedding provider 为 MiniMax。目标：embedding 检索与关键词基线并存于同一接口，策略层零改动。
+
+### 调研结论（来源见正文）
+
+- [MiniMax Embeddings 文档（Apifox 镜像）](https://5cetebcrn8.apifox.cn/doc-3518198)：字段 `texts`（非 OpenAI 的 `input`）、必填非对称 `type: db|query`、响应为 `vectors` + `base_resp`，1536 维，单条限 4096 token；
+- [RAGFlow #14716](https://github.com/infiniflow/ragflow/issues/14716) 佐证模型名 embo-01；
+- 实测 `https://api.minimaxi.com/v1/embeddings` 无需 GroupId（探针 status 0，1536 维）——文档里的 GroupId 参数在该域名下非必需。
+
+### 实际完成
+
+- 新增 `aster/embeddings.py`：`MiniMaxEmbeddings`（transport 可注入，便于离线测试）+ `cosine`；stdlib urllib，零新依赖；
+- `aster/knowledge.py` 新增 `EmbeddingKnowledgeBase`：文档向量启动时一次嵌入（type=db），查询走 type=query，余弦排序；`search`/`as_context` 与 `KnowledgeBase` 同接口，provider 的 `KnowledgeLike` 协议天然覆盖，策略层零改动；
+- CLI（console + web）：`--kb-mode keyword|embedding`，embedding 模式懒导入并要求 MINIMAX_API_KEY；
+- 测试：假 embedder（关键词决定向量，精确控制相似度）验证 db/query 分离、余弦排序、load、上下文格式一致性；新增 `cosine` 单测；
+- 顺带修复：`examples/kb.json` 的数据库答案还停留在 M9 之前的"单 JSON 文件"，已更新为 SQLite——知识库内容随代码演进漂移，这次是真实演示自己暴露的。
+
+### 执行过的验证
+
+- 全门禁：ruff/format/mypy 零问题，57 个测试全绿；
+- 真实对比演示（同一问题两种模式）：embedding 模式正确命中数据库条目并以知识库内容作答；两种模式均端到端可用。
+
+### 未解决问题
+
+- 文档向量不持久化（小库启动时一次调用可接受；知识库变大后需要向量缓存/库）。
+- 检索质量无系统评测集（当前靠示例问题人工判断）。
+
+### 下一步建议
+
+停止。剩余方向：真实渠道凭据、意图分类时机、部署形态、MCP 客户端（utopia 项目暴露只读 MCP 工具，可能成为首个真实工具源，触发条件已写入 PLAN）。
