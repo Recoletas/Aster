@@ -4,7 +4,7 @@ Aster 是一个由两人共同演进的智能体客服学习项目。项目希�
 
 ## 当前状态
 
-**M1–M10 已完成**：消息边界、对话应用层、持久化、真实 LLM、工具调用与对账、RAG 关键词基线、Web 渠道、SQLite 存储、SSE 流式。
+**M1–M11 已完成**：消息边界、对话应用层、持久化、真实 LLM、工具调用与对账、RAG（关键词 + MiniMax embedding）、Web 渠道、SQLite 存储、SSE 流式。
 
 当前已有：
 
@@ -13,13 +13,13 @@ Aster 是一个由两人共同演进的智能体客服学习项目。项目希�
 - SQLite 单文件持久化、重启恢复、重复投递幂等（`--store`）；
 - 真实 LLM 回复：MiniMax（Anthropic 兼容端点）；离线确定性 echo 是默认策略，`--llm` 切换；
 - 工具调用：pydantic 校验 + 注册表白名单 + 审计日志 + 声明-审计对账（虚构动作可检出并纠正），内置内存工单工具；
-- RAG 关键词基线：`--knowledge` 检索本地 FAQ 注入上下文（embedding 检索未做）；
+- RAG：`--knowledge` 本地 FAQ 注入上下文，`--kb-mode keyword|embedding` 两种检索（embedding 走 MiniMax embo-01，需密钥）；
 - SSE 流式回复：Web `--stream` 模式（仅纯聊天路径，工具回复非流式）；
 - 51 个标准库风格测试（全部离线）。
 
 当前没有：
 
-- 工具调用时机保证（模型自发决定 + 对账兜底）、工具回复的流式、embedding RAG、MCP 客户端、鉴权；
+- 工具调用时机保证（模型自发决定 + 对账兜底）、工具回复的流式、MCP 客户端、鉴权；
 - 真实消息渠道（QQ/企微/钉钉/飞书）、人工坐席、工单后端；
 - 部署方案与 Web 框架（本地 stdlib HTTP）。
 
@@ -35,7 +35,7 @@ printf '%s\n' '{"room":"r","event":"m1","user":"a","body":"hello"}' | python3 -m
 # LLM + 工具 + 知识库 + 持久化（Console）
 python3 -m venv .venv && .venv/bin/pip install -e ".[dev]"
 export MINIMAX_API_KEY=sk-...
-printf '%s\n' '{"room":"r","event":"m1","user":"a","body":"帮我建个工单：打印机坏了，优先级高"}' | .venv/bin/python -m aster.console --llm --knowledge examples/kb.json --store data/sessions.db
+printf '%s\n' '{"room":"r","event":"m1","user":"a","body":"帮我建个工单：打印机坏了，优先级高"}' | .venv/bin/python -m aster.console --llm --knowledge examples/kb.json --kb-mode embedding --store data/sessions.db
 
 # 本地 Web 渠道（浏览器打开 http://127.0.0.1:8000）
 .venv/bin/python -m aster.web_channel --llm --stream --knowledge examples/kb.json --store data/sessions.db

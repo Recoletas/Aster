@@ -1,12 +1,15 @@
-"""Keyword baseline retrieval over a local JSON knowledge base.
+"""Knowledge bases with a shared retrieval interface.
 
-Retrieval is deliberately simple: CJK character bigrams plus lowercase
-ASCII words, scored by overlap with the query. Embeddings and a vector
-store are a later step once keyword quality stops being enough.
+Two implementations behind the same ``search``/``as_context`` shape:
+``KnowledgeBase`` (keyword baseline, offline) and
+``EmbeddingKnowledgeBase`` (MiniMax embo-01, asymmetric db/query
+retrieval). Strategies only see the interface.
 """
 
 import json
 import re
+
+from aster.embeddings import MiniMaxEmbeddings, cosine
 
 MIN_SCORE = 0.1
 TOP_K = 2
@@ -56,3 +59,41 @@ class KnowledgeBase:
         """Format hits for the system prompt; empty when nothing hit."""
 
         return "\n\n".join(f"【{entry['question']}】\n{entry['answer']}" for entry in hits)
+
+
+class EmbeddingKnowledgeBase:
+    """Retrieval by MiniMax embeddings with the asymmetric db/query split.
+
+    Document vectors are computed once at load time (``type=db``); each
+    query embeds the question (``type=query``). Not persisted — small
+    knowledge bases re-embed in one call at startup.
+    """
+
+    def __init__(self, entries: list[dict], embeddings: MiniMaxEmbeddings) -> None:
+        self._entries = entries
+        self._embeddings = embeddings
+        self._doc_vectors = embeddings.embed(
+            [entry["question"] + " " + entry["answer"] for entry in entries],
+            type="db",
+        )
+
+    @classmethod
+    def load(cls, path: str, embeddings: MiniMaxEmbeddings) -> "EmbeddingKnowledgeBase":
+        with open(path, encoding="utf-8") as file:
+            data = json.load(file)
+        return cls(data["entries"], embeddings)
+
+    def search(self, query: str, k: int = TOP_K) -> list[dict]:
+        """Return the top-k entries most similar to the query vector."""
+
+        [query_vector] = self._embeddings.embed([query], type="query")
+        scored = [
+            (cosine(query_vector, doc_vector), entry)
+            for entry, doc_vector in zip(self._entries, self._doc_vectors, strict=True)
+        ]
+        scored.sort(key=lambda pair: pair[0], reverse=True)
+        return [entry for score, entry in scored[:k] if score > 0]
+
+    @staticmethod
+    def as_context(hits: list[dict]) -> str:
+        return KnowledgeBase.as_context(hits)

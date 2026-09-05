@@ -10,7 +10,7 @@
     },
     {
       "question": "Aster 使用什么数据库？",
-      "answer": "当前没有数据库。会话状态持久化是单 JSON 文件实验（python -m aster.console --store 路径），支持重启恢复和重复投递幂等；数据库选型保持开放。"
+      "answer": "当前使用标准库 sqlite3 的单文件数据库（python -m aster.console --store data/sessions.db），由 SQLite 负责原子性与写入锁；支持重启恢复和重复投递幂等。更重的数据库选型保持开放。"
     },
     {
       "question": "Aster 支持哪些消息渠道？",
