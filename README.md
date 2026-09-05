@@ -4,7 +4,7 @@ Aster 是一个由两人共同演进的智能体客服学习项目。项目希�
 
 ## 当前状态
 
-**M1–M11 已完成**：消息边界、对话应用层、持久化、真实 LLM、工具调用与对账、RAG（关键词 + MiniMax embedding）、Web 渠道、SQLite 存储、SSE 流式。
+**M1–M12 已完成**：消息边界、对话应用层、持久化、真实 LLM、工具调用与对账、RAG（关键词 + MiniMax embedding）、Web 渠道、SQLite 存储、SSE 流式、MCP 工具源接入（面向 utopia）。
 
 当前已有：
 
@@ -36,6 +36,9 @@ printf '%s\n' '{"room":"r","event":"m1","user":"a","body":"hello"}' | python3 -m
 python3 -m venv .venv && .venv/bin/pip install -e ".[dev]"
 export MINIMAX_API_KEY=sk-...
 printf '%s\n' '{"room":"r","event":"m1","user":"a","body":"帮我建个工单：打印机坏了，优先级高"}' | .venv/bin/python -m aster.console --llm --knowledge examples/kb.json --kb-mode embedding --store data/sessions.db
+
+# 经 MCP 挂载远程工具源（utopia 预演：本地知识库作为 MCP 服务器）
+printf '%s\n' '{"room":"r","event":"m1","user":"a","body":"Aster 用什么数据库？"}' | .venv/bin/python -m aster.console --llm --mcp-command "python3 examples/kb_mcp_server.py"
 
 # 本地 Web 渠道（浏览器打开 http://127.0.0.1:8000）
 .venv/bin/python -m aster.web_channel --llm --stream --knowledge examples/kb.json --store data/sessions.db

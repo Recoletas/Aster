@@ -11,8 +11,10 @@ from aster import web_channel
 class WebChannelTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        args = SimpleNamespace(port=0, store=None, llm=False, knowledge=None)
-        cls.server = web_channel.make_server(args)
+        args = SimpleNamespace(
+            port=0, store=None, llm=False, knowledge=None, kb_mode="keyword", mcp_command=None
+        )
+        cls.server, cls.runtime = web_channel.make_server(args)
         cls.port = cls.server.server_address[1]
         cls.thread = threading.Thread(target=cls.server.serve_forever, daemon=True)
         cls.thread.start()
@@ -21,6 +23,7 @@ class WebChannelTest(unittest.TestCase):
     def tearDownClass(cls):
         cls.server.shutdown()
         cls.server.server_close()
+        cls.runtime.close()
 
     def request(self, path: str, raw: bytes | None = None):
         request = urllib.request.Request(

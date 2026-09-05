@@ -13,7 +13,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 
 from aster.agent import SessionStore
-from aster.console import build_runtime, incoming_from_console, process_payload
+from aster.console import Runtime, build_runtime, incoming_from_console, process_payload
 from aster.storage import save_store
 
 PAGE = """<!doctype html>
@@ -252,7 +252,7 @@ document.getElementById('f').onsubmit = async (event) => {
 """
 
 
-def make_server(args: argparse.Namespace) -> ThreadingHTTPServer:
+def make_server(args: argparse.Namespace) -> tuple[ThreadingHTTPServer, Runtime]:
     runtime = build_runtime(args)
     handler = type(
         "BoundChatHandler",
@@ -263,7 +263,7 @@ def make_server(args: argparse.Namespace) -> ThreadingHTTPServer:
             "streaming": runtime.streaming,
         },
     )
-    return ThreadingHTTPServer(("127.0.0.1", args.port), handler)
+    return ThreadingHTTPServer(("127.0.0.1", args.port), handler), runtime
 
 
 def main() -> None:
@@ -285,12 +285,21 @@ def main() -> None:
         default="keyword",
         help="knowledge retrieval mode; embedding uses MiniMax embo-01 (needs MINIMAX_API_KEY)",
     )
+    parser.add_argument(
+        "--mcp-command",
+        action="append",
+        metavar="CMD",
+        help="MCP stdio server to attach as a tool source (repeatable, needs --llm, no --stream)",
+    )
     args = parser.parse_args()
 
-    server = make_server(args)
+    server, runtime = make_server(args)
     print(f"Aster web channel serving on http://127.0.0.1:{server.server_address[1]}")
-    with suppress(KeyboardInterrupt):
-        server.serve_forever()
+    try:
+        with suppress(KeyboardInterrupt):
+            server.serve_forever()
+    finally:
+        runtime.close()
 
 
 if __name__ == "__main__":

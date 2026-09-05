@@ -13,6 +13,7 @@ from aster.messages import ConversationRef, IncomingMessage, Reply
 from aster.storage import load_store, save_store
 
 if TYPE_CHECKING:
+    from aster.mcp import McpStdioClient
     from aster.provider import KnowledgeLike
     from aster.tools import ToolRegistry
 
@@ -90,10 +91,16 @@ class Runtime:
         store: SessionStore,
         registry: "ToolRegistry | None",
         streaming: bool,
+        mcp_clients: "list[McpStdioClient] | None" = None,
     ) -> None:
         self.store = store
         self.registry = registry
         self.streaming = streaming
+        self.mcp_clients = mcp_clients or []
+
+    def close(self) -> None:
+        for client in self.mcp_clients:
+            client.close()
 
 
 def build_runtime(args: argparse.Namespace) -> Runtime:
@@ -106,6 +113,7 @@ def build_runtime(args: argparse.Namespace) -> Runtime:
         knowledge = KnowledgeBase.load(args.knowledge)
 
     registry = None
+    mcp_clients = []
     reply_text: Callable[[History], str | Iterator[str]] = echo_reply
     streaming = False
     if args.llm:
@@ -133,6 +141,7 @@ def build_runtime(args: argparse.Namespace) -> Runtime:
             reply_text = make_stream_reply(knowledge=knowledge)
         else:
             registry = build_default_registry()
+            mcp_clients = _attach_mcp_servers(args, registry)
             reply_text = make_chat_reply(registry, knowledge=knowledge)
 
     if args.store and os.path.exists(args.store):
@@ -140,7 +149,25 @@ def build_runtime(args: argparse.Namespace) -> Runtime:
     else:
         store = SessionStore(reply_text=reply_text)
 
-    return Runtime(store, registry, streaming)
+    return Runtime(store, registry, streaming, mcp_clients)
+
+
+def _attach_mcp_servers(args: argparse.Namespace, registry: "ToolRegistry") -> list:
+    """Start configured MCP servers and register their tools; loud on failure."""
+
+    from aster.mcp import McpError, McpStdioClient, client_tools
+
+    clients = []
+    for command_string in getattr(args, "mcp_command", None) or []:
+        try:
+            client = McpStdioClient.from_command_string(command_string)
+            client.start()
+            for tool in client_tools(client):
+                registry.add(tool)
+        except (McpError, RuntimeError, OSError, TimeoutError) as error:
+            raise SystemExit(f"error: MCP server {command_string!r}: {error}") from error
+        clients.append(client)
+    return clients
 
 
 def print_audit(registry: "ToolRegistry") -> None:
@@ -177,28 +204,38 @@ def main() -> None:
         default="keyword",
         help="knowledge retrieval mode; embedding uses MiniMax embo-01 (needs MINIMAX_API_KEY)",
     )
+    parser.add_argument(
+        "--mcp-command",
+        action="append",
+        metavar="CMD",
+        help="MCP stdio server to attach as a tool source, e.g. "
+        '"python3 examples/kb_mcp_server.py" (repeatable, needs --llm)',
+    )
     args = parser.parse_args()
 
     runtime = build_runtime(args)
     store = runtime.store
 
-    for line in sys.stdin:
-        line = line.strip()
-        if not line:
-            continue
+    try:
+        for line in sys.stdin:
+            line = line.strip()
+            if not line:
+                continue
 
-        try:
-            output = process_line(line, store)
-        except (ValueError, RuntimeError) as error:
-            print(f"error: {error}", file=sys.stderr)
-            raise SystemExit(2) from error
+            try:
+                output = process_line(line, store)
+            except (ValueError, RuntimeError) as error:
+                print(f"error: {error}", file=sys.stderr)
+                raise SystemExit(2) from error
 
-        print(output)
-        if args.store:
-            save_store(args.store, store)
+            print(output)
+            if args.store:
+                save_store(args.store, store)
 
-    if runtime.registry is not None:
-        print_audit(runtime.registry)
+        if runtime.registry is not None:
+            print_audit(runtime.registry)
+    finally:
+        runtime.close()
 
 
 if __name__ == "__main__":

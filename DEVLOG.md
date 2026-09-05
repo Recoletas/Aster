@@ -602,3 +602,42 @@
 ### 下一步建议
 
 停止。剩余方向：真实渠道凭据、意图分类时机、部署形态、MCP 客户端（utopia 项目暴露只读 MCP 工具，可能成为首个真实工具源，触发条件已写入 PLAN）。
+
+## 2026-09-04 — M12 MCP 客户端与 utopia 对接层
+
+### 本次目标
+
+人工确认定位：Aster 特化为轻量渠道/Agent 前端，utopia 承担知识底座。落地首个真实工具源协议：MCP stdio 客户端 + 远程工具进注册表。
+
+### 调研结论（来源）
+
+- [MCP 2025-06-18 规范：transports](https://modelcontextprotocol.io/specification/2025-06-18/basic/transports)：stdio 传输为换行分隔 JSON-RPC（无内嵌换行），server 非协议输出禁止上 stdout；
+- [MCP 生命周期](https://modelcontextprotocol.io/specification/2025-06-18/basic/lifecycle)：initialize（protocolVersion 2025-06-18 + capabilities + clientInfo）→ 响应 → notifications/initialized → 正常操作；stdio 关闭 = 关 stdin → SIGTERM → SIGKILL；
+- [utopia](https://github.com/deeplethe/utopia)：README 确认"同样只读工具经 MCP 暴露"，但启动命令/工具名未见文档——适配器因此做成配置项，待实例可用后核对。
+
+### 实际完成
+
+- 新增 `aster/mcp.py`：`McpStdioClient`（transport 可注入；subprocess transport 用 select 实现 30s 请求超时；通知消息在等响应时安全跳过）+ `client_tools` 把服务端工具适配为 `RemoteTool`；零新依赖——官方 SDK 是 asyncio，会迫使进程模型转向，自建让协议可见；
+- `aster/tools.py`：新增 `RemoteTool`（服务端拥有参数契约：schema 透传、isError 转 error 字符串）与 `ToolRegistry.add`（重复注册大声失败）；对账对 RemoteTool 天然不参与（无 claim 模式），白名单与审计机制不变；
+- CLI（console + web）：`--mcp-command` 可重复挂多个 MCP 服务器，失败大声退出并显示服务端 stderr；Runtime.close 统一清理子进程；
+- `examples/kb_mcp_server.py`：本地知识库暴露为 MCP 工具——utopia"搜索即工具"模式的端到端预演；
+- 测试：内存 transport 的握手/列表/调用/isError/JSON-RPC 错误/通知跳过 + 注册表集成 + 重复注册拒绝 + **真实子进程端到端**（我们的客户端对示例服务器），共 64 个。
+
+### 关键决策或发现
+
+- 分支策略：M12 堆叠在未合并的 `feat/m11-embedding-rag` 之上（`feat/m12-mcp-utopia`），消除 console.py 冲突；合并顺序 M11 → M12；
+- 过程事故两次，均被真实执行当场抓住：①编辑误删示例服务器 `inputSchema` 行（JSON 结构破坏，ruff/测试无法直接发现，重读自查发现）；②示例服务器子进程在非 .venv python 下 `ModuleNotFoundError`（真实演示暴露）——示例加 sys.path 自举，transport 改为继承 stderr 使崩溃可见。
+
+### 执行过的验证
+
+- 全门禁：ruff/format/mypy 零问题，64 测试（.venv）+ 53+1 跳过（裸 python）全绿；
+- 真实演示：MiniMax 模型经 MCP 调用 `kb_search` 回答数据库问题，审计记录 `tool: kb_search {...}`，回答准确引用更新后的 SQLite 知识。
+
+### 未解决问题
+
+- utopia 侧未验证：其 MCP 启动命令、工具名与 schema 待实例可用后核对适配；
+- MCP 客户端无重连/并发（单会话批量场景够用）；stdio only，Streamable HTTP 待需要时再加。
+
+### 下一步建议
+
+停止。合并顺序 M11 → M12。剩余：真实渠道凭据、意图分类时机、部署形态、utopia 实例接线。

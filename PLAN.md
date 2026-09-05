@@ -2,7 +2,7 @@
 
 ## 当前阶段
 
-M1–M11 均已完成（2026-09-04）。人工验收经用户授权跳过；MCP 客户端按论证暂缓（见开放问题）。
+M1–M12 均已完成（2026-09-04）。定位演进：Aster 特化为轻量渠道/Agent 前端，知识底座方向对接 utopia（经 MCP）。人工验收经用户授权跳过。
 
 ## 已完成里程碑
 
@@ -41,6 +41,14 @@ M1–M11 均已完成（2026-09-04）。人工验收经用户授权跳过；MCP 
 
 - CJK 二元组 + ASCII 词检索，命中条目注入 system；`examples/kb.json` 为真实 FAQ。提交 `1395548`。
 
+### M12 MCP 客户端与 utopia 对接层
+
+- 自建同步 stdio MCP 客户端（`aster/mcp.py`：newline-delimited JSON-RPC，initialize 握手、tools/list、tools/call，select 超时 30s，零新依赖）——官方 SDK 是 asyncio，会迫使进程模型转向，自建让协议可见且可测试；
+- `RemoteTool` 进注册表：服务端拥有参数契约（schema 透传），工具级错误经 `isError` 变为 error 字符串进审计；本地/远程工具白名单与对账机制完全一致；
+- CLI `--mcp-command`（可重复，console 与 web 同享 build_runtime）；`examples/kb_mcp_server.py` 把本地知识库暴露为 MCP 工具——utopia 模式（搜索即工具）的端到端预演；
+- 真实验证：MiniMax 模型经 MCP 调用 kb_search 回答知识库问题，审计可查；64 离线测试（含真实子进程端到端）；
+- utopia 适配为配置项：`--mcp-command "utopia <mcp 子命令>"`，其工具名/schema 未验证——等团队跑起 utopia 实例后接线并核对。
+
 ### M11 embedding RAG（MiniMax embo-01）
 
 - 人工指定 provider 为 MiniMax。`aster/embeddings.py`：非对称 db/query 协议（字段 `texts`，非 OpenAI 兼容），1536 维，stdlib urllib 零新依赖；`EmbeddingKnowledgeBase` 与关键词基线同接口，provider/策略零改动；CLI `--kb-mode keyword|embedding`。
@@ -69,7 +77,7 @@ M1–M11 均已完成（2026-09-04）。人工验收经用户授权跳过；MCP 
 ## 开放问题
 
 - Aster 是否最终面向多租户 SaaS 或再分发产品？当前不要求回答。
-- **MCP 客户端暂缓论证**：MCP 的价值在外部工具互通，当前 Aster 没有可对接的外部 MCP Server；官方 SDK 基于 asyncio，引入意味着进程模型转向。触发条件：出现第一个真实 MCP 工具源，或需要复用生态内现成工具时，再评估 client 接入（届时比较 asyncio 化与子进程桥接）。候选现实工具源：团队正在研究的 deeplethe/utopia（Apache-2.0 知识图谱平台，内置只读 MCP 工具）——若接入，Aster 定位为轻量渠道/Agent 前端，utopia 承担知识底座，两者互补而非重复。
+- **MCP 客户端暂缓论证**：MCP 的价值在外部工具互通，当前 Aster 没有可对接的外部 MCP Server；官方 SDK 基于 asyncio，引入意味着进程模型转向。触发条件：出现第一个真实 MCP 工具源，或需要复用生态内现成工具时，再评估 client 接入（届时比较 asyncio 化与子进程桥接）。候选现实工具源已出现：deeplethe/utopia（Apache-2.0 知识图谱平台，内置只读 MCP 工具）。M12 已提供通用 stdio MCP 客户端；剩余工作是拿到 utopia 实例的 MCP 启动命令与工具清单后做适配验证。Aster 定位为轻量渠道/Agent 前端，utopia 承担知识底座，两者互补而非重复。
 - 工具调用时机仍依赖模型自发性（M6 对账可检出、可纠正）；意图级 tool_choice 强制需要意图分类层，等真实误判率数据再设计。
 
 ## 下一道人工确认门

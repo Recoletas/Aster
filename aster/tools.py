@@ -60,12 +60,50 @@ class Tool(Generic[M]):
         return json.dumps(result, ensure_ascii=False)
 
 
+class RemoteTool:
+    """A tool served by an MCP server; the serving side validates arguments.
+
+    Local tools validate with pydantic here; remote tools arrive with the
+    server's JSON Schema and are executed through the client, so the
+    server stays the authority over its own contract. Duck-types Tool.
+    """
+
+    def __init__(
+        self,
+        name: str,
+        description: str,
+        input_schema: dict[str, Any],
+        execute_fn: Callable[[dict[str, Any]], str],
+    ) -> None:
+        self.name = name
+        self.description = description
+        self._input_schema = input_schema
+        self._execute_fn = execute_fn
+
+    def spec(self) -> dict[str, Any]:
+        return {
+            "name": self.name,
+            "description": self.description,
+            "input_schema": self._input_schema,
+        }
+
+    def execute(self, arguments: dict[str, Any]) -> str:
+        return self._execute_fn(arguments)
+
+
 class ToolRegistry:
     """The registered tools are exactly the ones the model may call."""
 
     def __init__(self, tools: list[Tool]) -> None:
-        self._tools = {tool.name: tool for tool in tools}
+        self._tools: dict[str, Tool | RemoteTool] = {tool.name: tool for tool in tools}
         self.audit: list[dict[str, Any]] = []
+
+    def add(self, tool: Tool | RemoteTool) -> None:
+        """Register one more tool; duplicates are a wiring error."""
+
+        if tool.name in self._tools:
+            raise ValueError(f"tool {tool.name}: already registered")
+        self._tools[tool.name] = tool
 
     def specs(self) -> list[dict[str, Any]]:
         return [tool.spec() for tool in self._tools.values()]
@@ -89,17 +127,20 @@ class ToolRegistry:
 
         A tool participates only if it declared both a claim pattern (how
         references to its output look in a reply) and a result ID pattern.
+        Remote tools declare none until their results prove reconcilable.
         """
 
         problems: list[str] = []
         for tool in self._tools.values():
-            if not tool.claim_pattern or not tool.result_id_pattern:
+            claim_pattern = getattr(tool, "claim_pattern", None)
+            result_id_pattern = getattr(tool, "result_id_pattern", None)
+            if not claim_pattern or not result_id_pattern:
                 continue
-            claimed = set(re.findall(tool.claim_pattern, reply))
+            claimed = set(re.findall(claim_pattern, reply))
             produced: set[str] = set()
             for entry in self.audit[since:]:
                 if entry["tool"] == tool.name and entry["ok"]:
-                    produced.update(re.findall(tool.result_id_pattern, entry["result"]))
+                    produced.update(re.findall(result_id_pattern, entry["result"]))
             missing = claimed - produced
             problems.extend(f"{tool.name}: {item}" for item in sorted(missing))
         return problems
